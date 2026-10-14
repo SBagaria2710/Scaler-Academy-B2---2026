@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My first web page</title>
+
+  <!-- <style>
+    h1 {
+      color: blue;
+    }
+  </style> -->
+
+  <link rel="stylesheet" href="./portfolio.css">
+</head>
+
+<body>
+  <header class="site-header">
+    <h1>My Developer Portfolio</h1>
+
+    <nav>
+      <a href="#about">About</a>
+      <a href="#skills">Skills</a>
+      <a href="#projects">Projects</a>
+      <a href="#contact">Contact</a>
+    </nav>
+  </header>
+
+  <p class="desc">A beginner full stack developer building real projects step by step.</p>
+
+  <main>
+    <section id="about" class="section-card">
+      <h2>About Me</h2>
+      <div class="about-content">
+        <img src="https://placehold.co/150x150" alt="Profile photo placeholder" class="about-avatar" />
+        <div class="about-text">
+          <p>I am learning full stack web development and building my foundations step by step. I enjoy solving problems
+            and turning ideas into real projects using HTML, CSS and JavaScript</p>
+          <p>When I am not coding, I am exploring new tools, reading documentation, and collaborating with other
+            learners.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="skills" class="section-card">
+      <h2>Skills I am learning</h2>
+
+      <ul class="skill-list">
+        <li>HTML</li>
+        <li>CSS</li>
+        <li>JavaScript</li>
+        <li>MongoDB</li>
+        <li>SQL</li>
+        <li>Backend</li>
+        <li>React</li>
+        <li>Python</li>
+        <li>NodeJS</li>
+        <li>Tailwind</li>
+        <li>Express</li>
+      </ul>
+    </section>
+
+    <section id="projects" class="section-card">
+      <h2>Projects</h2>
+      <div class="project-grid">
+        <article class="project-card featured-project">
+          <span class="project-status">Featured</span>
+          <h3>StackFolio</h3>
+          <p>A personal portfolio page built while learning HTML and CSS.</p>
+          <a href="#contact">Contact me about this project</a>
+        </article>
+
+        <article class="project-card featured-project">
+          <h3>Weather App</h3>
+          <p>A future project where I will learn APIs and JavaScript.</p>
+          <a href="#contact">Ask me about this project?</a>
+        </article>
+      </div>
+    </section>
+
+    <section id="contact" class="section-card">
+      <h2>Contact Me</h2>
+      <p>The contact form will be added in this section</p>
+
+      <form>
+        <label for="full-name">Full Name</label>
+        <input type="text" id="full-name" name="fullName" required>
+
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required>
+
+        <label for="reason">Reason for contact</label>
+        <select id="reason" name="reason" required>
+          <option value="">Select a reason</option>
+          <option value="project">Project Discussion</option>
+          <option value="job">Job Opportunity</option>
+          <option value="collaboration">Collaboration</option>
+          <option value="feedback">Feedback</option>
+        </select>
+
+        <label for="message">Message</label>
+        <textarea id="message" name="message" rows="5" minlength="20" maxlength="300" required></textarea>
+
+        <fieldset>
+          <legend>Preferred Contact Method</legend>
+
+          <input type="radio" id="contact-email" name="contactMethod" value="email" checked>
+          <label for="contact-email">Email</label>
+
+          <input type="radio" id="contact-phone" name="contactMethod" value="phone">
+          <label for="contact-phone">Phone</label>
+        </fieldset>
+
+        <input type="checkbox" id="consent" name="consent" required>
+        <label for="consent">I agree to be contacted about my message.</label>
+
+        <button type="submit">Send Message</button>
+      </form>
+    </section>
+  </main>
+
+  <footer>
+    <p>Built with HTML as part of my full stack learning journey.</p>
+  </footer>
+
+  <a href="#contact" class="floating-contact">Contact</a>
+</body>
+
+</html>
+
+<!-- 
+"Section" groups related contact
+"id" gives a section a unique identity
+"article" is useful for one self-contained project item.
+h1, h2, and h3 create content hierachy, not just different font sizes.
+-->

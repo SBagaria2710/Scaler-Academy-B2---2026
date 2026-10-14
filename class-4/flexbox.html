@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CSS Flexbox</title>
+    <style>
+      h1 {
+        text-align: center;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        text-decoration: underline;
+      }
+
+      .container {
+        width: 95%;
+        margin: 5px;
+        padding: 10px;
+        background: lightblue;
+        border: 2px solid black;
+        border-radius: 4px;
+        height: 600px;
+
+        display: flex;
+        flex-direction: row;
+        justify-content: flex-start;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .box {
+        width: 100px;
+        /* height: 100px; */
+        border: 2px solid black;
+        border-radius: 4px;
+        background: red;
+        /* margin: 10px; */
+        color: white;
+        padding: 5px;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 32px;
+
+        flex-grow: 1;
+      }
+
+      #box-a {
+        flex-basis: 200px;
+      }
+
+      #box-b {
+        flex-grow: 2;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>CSS Flexbox</h1>
+    <div class="container">
+      <div class="box" id="box-a">1</div>
+      <div class="box" id="box-b">2</div>
+      <div class="box" id="box-c">3</div>
+      <div class="box" id="box-d">4</div>
+    </div>
+  </body>
+</html>
