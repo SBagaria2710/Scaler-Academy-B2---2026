@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grid</title>
+    <link rel="stylesheet" href="./style.css">
+
+    <style>
+        .box {
+            width: 100px;
+            height: 100px;
+            background: red;
+        }
+
+        /* Tablet */
+        @media (max-width: 1024px) {
+            .box {
+                background-color: blue;
+            }
+        }
+        
+        /* Mobile */
+        @media (max-width: 768px) {
+            .box {
+                background: yellow;
+            }
+        }
+
+    </style>
+</head>
+
+<body>
+    <div class="box"></div>
+</body>
+
+</html>
