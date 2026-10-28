@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My first web page</title>
+
+  <link rel="stylesheet" href="./style.css">
+</head>
+
+<body>
+
+  <script src="./script.js"></script>
+  <script>
+    // var a = true;
+    // console.log(a);         // true
+    // console.log(typeof a);  // "boolean"
+
+    // a = "Scaler";
+    // console.log(a);         // "Scaler"
+    // console.log(typeof a);  // "string"
+
+    // a = 42;
+    // console.log(a);         // 42
+    // console.log(typeof a);  // "number"
+
+    var x = 10;
+    var x = 20;
+    console.log(x); // 20
+
+    // LET
+    let city = "Delhi";
+    console.log(city); // Delhi
+
+    city = "Mumbai";
+
+    // CONST
+    const pi = 3.14;
+    // pi = 3.15; // ERROR!!
+
+    console.log(pi);
+
+    {
+      let age = 20;
+      const city = "Delhi";
+    }
+
+    // REFERENCE DATA TYPES
+    // 1. ARRAYS
+    let arr = [1, "scaler", true, null, [2, 3, [12312,12312], 1231234]];
+
+    // LOOPS
+    let count = 1;
+    while (count <= 5) {
+      console.log(count);
+      count++;
+    }
+
+    for(let i = 0; i < 5; i++) {
+      console.log(i);
+    }
+
+    console.log("----------------------")
+    const skills = ["HTML", "CSS", "JavaScript", "Git"]; // skills[skills.length - 1]
+
+    for (let i = 0; i < skills.length; i++) {
+      console.log(`Skill ${i + 1}: ${skills[i]}`);
+    }
+
+    console.log("----------------------")
+    for (const skill of skills) {
+      console.log(skill);
+    }
+
+    // FUNCTIONS
+    function serveBeverage(drink) {
+      console.log("Serving " + drink);
+    }
+
+    console.log("Serving tea");
+    console.log("Serving coffee");
+
+
+    serveBeverage("tea");
+    serveBeverage("Coffee");
+  </script>
+</body>
+
+</html>
