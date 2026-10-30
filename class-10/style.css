@@ -1,0 +1,66 @@
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    color: #222222;
+    background-color: #F5F7FA;
+}
+
+header,
+footer {
+    background-color: #1F2937;
+    color: white;
+    text-align: center;
+    padding: 24px;
+}
+
+h1, h2, h3 {
+    color: #1F2937;
+}
+
+header h1,
+footer p {
+    color: white;
+}
+
+a {
+    color: #2563EB;
+}
+
+nav a {
+    text-decoration: none;
+}
+
+.section-card {
+    background-color: white;
+    border: 1px solid #dddddd;
+    padding: 24px;
+    margin-bottom: 20px;
+}
+
+
+
+
+
+
+
+/* h1 {
+    color: orange;
+    font-size: 24px;
+}
+
+p {
+    color: hsl(141, 68%, 44%);
+    line-height: 1.6;
+}
+
+.section-card {
+    background-color: pink;
+}
+
+#contact {
+    background-color: #f9fbff;
+}
+
+h2,
+p {
+    color: brown;
+} */

@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JavaScript Temporal Dead Zone (TDZ)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
+
+        body {
+            background: #0f172a;
+            font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden
+        }
+
+        #wrap {
+            width: 1920px;
+            height: 1080px;
+            transform-origin: top center;
+            position: relative
+        }
+
+        canvas {
+            display: block
+        }
+
+        #bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(15, 23, 42, .96);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255, 255, 255, .08);
+            padding: 16px 24px;
+            z-index: 200;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap
+        }
+
+        .b {
+            padding: 14px 48px;
+            border: none;
+            border-radius: 14px;
+            font: 700 16px/1 'Inter', 'Segoe UI', sans-serif;
+            cursor: pointer;
+            transition: all .2s;
+            user-select: none
+        }
+
+        .b:active {
+            transform: scale(.95)
+        }
+
+        #prev {
+            background: rgba(255, 255, 255, .08);
+            color: #94a3b8
+        }
+
+        #prev:hover {
+            background: rgba(255, 255, 255, .14);
+            color: #e2e8f0
+        }
+
+        #next {
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            color: #fff;
+            box-shadow: 0 4px 24px rgba(59, 130, 246, .3)
+        }
+
+        #next:hover {
+            box-shadow: 0 4px 32px rgba(59, 130, 246, .5)
+        }
+
+        #info {
+            font: 700 15px/1.4 'Inter', 'Segoe UI', sans-serif;
+            color: #94a3b8;
+            min-width: 400px;
+            text-align: center;
+            padding: 10px 24px;
+            background: rgba(255, 255, 255, .05);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, .06)
+        }
+
+        #info .n {
+            color: #60a5fa;
+            font-weight: 800
+        }
+
+        #info .t {
+            color: #e2e8f0
+        }
+
+        .keys {
+            font: 500 13px 'Inter', 'Segoe UI', sans-serif;
+            color: #475569
+        }
+    </style>
+</head>
+
+<body>
+    <div id="wrap"><canvas id="c" width="1920" height="1080"></canvas></div>
+    <div id="bar">
+        <button class="b" id="prev">◀ Back</button>
+        <div id="info"><span class="n">1</span> / 8 — <span class="t">Ready</span></div>
+        <button class="b" id="next">Next ▶</button>
+        <div class="keys">← → arrow keys &nbsp;|&nbsp; spacebar</div>
+    </div>
+    <script>
+        const cv = document.getElementById('c'), X = cv.getContext('2d'), W = 1920, H = 1080;
+        function fit() { const s = Math.min(window.innerWidth / W, (window.innerHeight - 70) / H, 1); document.getElementById('wrap').style.transform = `scale(${s})` }
+        fit(); window.addEventListener('resize', fit);
+
+        /* ═══ COLORS ═══ */
+        const P = {
+            bg: '#0f172a', bg2: '#1e293b', bg3: '#334155',
+            tx: '#f1f5f9', tx2: '#cbd5e1', tx3: '#94a3b8', tx4: '#64748b',
+            blue: '#3b82f6', blueD: '#1d4ed8', blueL: '#93c5fd', blueBg: 'rgba(59,130,246,.1)',
+            purple: '#8b5cf6', purpleD: '#6d28d9', purpleL: '#c4b5fd', purpleBg: 'rgba(139,92,246,.1)',
+            green: '#10b981', greenD: '#059669', greenL: '#6ee7b7', greenBg: 'rgba(16,185,129,.1)',
+            yellow: '#eab308', yellowD: '#ca8a04', yellowL: '#fde047', yellowBg: 'rgba(234,179,8,.1)',
+            red: '#ef4444', redD: '#dc2626', redL: '#fca5a5', redBg: 'rgba(239,68,68,.12)',
+            gray: '#64748b', grayD: '#475569', grayL: '#94a3b8', grayBg: 'rgba(100,116,139,.1)',
+            border: 'rgba(255,255,255,.06)', borderL: 'rgba(255,255,255,.12)',
+        };
+
+        /* ═══ EASING ═══ */
+        const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+        const eOut = t => 1 - Math.pow(1 - t, 3);
+        const eBack = t => { const c = 1.70158; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2) };
+        const eElastic = t => { if (!t || t === 1) return t; return Math.pow(2, -10 * t) * Math.sin((t * 10 - .75) * 2 * Math.PI / 3) + 1 };
+        const lerp = (a, b, t) => a + (b - a) * t;
+        const pulse = () => .5 + .5 * Math.sin(performance.now() * .004);
+        const now = () => performance.now();
+
+        /* ═══ STEPS ═══ */
+        const STEPS = [
+            { id: 0, label: 'Title — Temporal Dead Zone' },
+            { id: 1, label: 'Show Source Code' },
+            { id: 2, label: 'Program Starts' },
+            { id: 3, label: 'Creation Phase — Hoisting' },
+            { id: 4, label: 'TDZ Explained' },
+            { id: 5, label: 'console.log(score) — ReferenceError' },
+            { id: 6, label: 'let score = 95 — Never Reached' },
+            { id: 7, label: 'Key Concepts & Comparison' },
+        ];
+        let step = 0, anim = 0; const AD = 650;
+
+        function setStep(s) {
+            s = clamp(s, 0, STEPS.length - 1); if (s === step) return; step = s; anim = 0;
+            document.getElementById('info').innerHTML = `<span class="n">${step + 1}</span> / ${STEPS.length} — <span class="t">${STEPS[step].label}</span>`
+        }
+        document.getElementById('next').onclick = () => setStep(step + 1);
+        document.getElementById('prev').onclick = () => setStep(step - 1);
+        document.addEventListener('keydown', e => { if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); setStep(step + 1) } if (e.key === 'ArrowLeft') { e.preventDefault(); setStep(step - 1) } });
+        setStep(0);
+
+        /* ═══ DRAW HELPERS ═══ */
+        function rr(x, y, w, h, r = 12) { X.beginPath(); X.moveTo(x + r, y); X.lineTo(x + w - r, y); X.quadraticCurveTo(x + w, y, x + w, y + r); X.lineTo(x + w, y + h - r); X.quadraticCurveTo(x + w, y + h, x + w - r, y + h); X.lineTo(x + r, y + h); X.quadraticCurveTo(x, y + h, x, y + h - r); X.lineTo(x, y + r); X.quadraticCurveTo(x, y, x + r, y); X.closePath() }
+        function fillRR(x, y, w, h, r, col) { X.fillStyle = col; rr(x, y, w, h, r); X.fill() }
+        function strokeRR(x, y, w, h, r, col, lw = 1) { X.strokeStyle = col; X.lineWidth = lw; rr(x, y, w, h, r); X.stroke() }
+
+        function glowBox(x, y, w, h, col, intensity = .5) {
+            X.save(); X.shadowColor = col; X.shadowBlur = 24 * intensity;
+            X.fillStyle = col + '10'; rr(x - 2, y - 2, w + 4, h + 4, 14); X.fill(); X.restore();
+        }
+
+        function panel(x, y, w, h, title, titleCol, icon) {
+            X.save();
+            const grad = X.createLinearGradient(x, y, x, y + h);
+            grad.addColorStop(0, 'rgba(30,41,59,.94)'); grad.addColorStop(1, 'rgba(15,23,42,.97)');
+            X.fillStyle = grad; rr(x, y, w, h, 16); X.fill();
+            strokeRR(x, y, w, h, 16, P.border, 1);
+            fillRR(x, y, w, 48, 16, P.bg2); X.fillRect(x, y + 36, w, 12);
+            X.strokeStyle = P.border; X.lineWidth = 1; X.beginPath(); X.moveTo(x, y + 48); X.lineTo(x + w, y + 48); X.stroke();
+            X.font = '800 15px "Inter","Segoe UI",sans-serif'; X.textAlign = 'left'; X.fillStyle = titleCol;
+            X.fillText((icon || '') + ' ' + title, x + 18, y + 32);
+            X.restore();
+        }
+
+        function phaseBadge(x, y, text, col, a) {
+            X.save(); X.globalAlpha = a;
+            X.font = '800 13px "Inter",sans-serif';
+            const tw = X.measureText(text).width + 22;
+            fillRR(x, y - 14, tw, 28, 7, col);
+            X.fillStyle = '#fff'; X.textAlign = 'left'; X.fillText(text, x + 11, y + 4);
+            X.restore();
+        }
+
+        /* ═══ TITLE ═══ */
+        function drawTitle(a) {
+            X.save(); X.globalAlpha = a;
+            const grad = X.createLinearGradient(W / 2 - 400, 0, W / 2 + 400, 0);
+            grad.addColorStop(0, P.blue); grad.addColorStop(.4, P.purple); grad.addColorStop(.7, P.yellow); grad.addColorStop(1, P.red);
+            X.font = '900 56px "Inter","Segoe UI",sans-serif'; X.textAlign = 'center';
+            X.fillStyle = grad;
+            X.fillText('Temporal Dead Zone (TDZ)', W / 2, H / 2 - 60);
+
+            X.font = '500 24px "Inter","Segoe UI",sans-serif'; X.fillStyle = P.tx3;
+            X.fillText('Why let and const behave differently from var', W / 2, H / 2 - 10);
+
+            // Color legend
+            const cols = [
+                { label: 'Program Start', col: P.blue },
+                { label: 'Creation Phase', col: P.purple },
+                { label: 'TDZ', col: P.yellow },
+                { label: 'ReferenceError', col: P.red },
+                { label: 'Initialized', col: P.green },
+                { label: 'Unreachable', col: P.gray },
+            ];
+            const pillW = 160, pillGap = 14;
+            const totalPW = cols.length * pillW + (cols.length - 1) * pillGap;
+            const startX = W / 2 - totalPW / 2;
+            cols.forEach((c, i) => {
+                const px = startX + i * (pillW + pillGap);
+                const da = eOut(clamp((a - .08 * i) * 3));
+                X.save(); X.globalAlpha = da;
+                fillRR(px, H / 2 + 40, pillW, 42, 10, c.col + '20');
+                strokeRR(px, H / 2 + 40, pillW, 42, 10, c.col + '50', 1.5);
+                X.fillStyle = c.col; X.beginPath(); X.arc(px + 18, H / 2 + 61, 5, 0, Math.PI * 2); X.fill();
+                X.font = '600 14px "Inter",sans-serif'; X.fillStyle = c.col; X.textAlign = 'left';
+                X.fillText(c.label, px + 30, H / 2 + 66);
+                X.restore();
+            });
+
+            X.save(); X.globalAlpha = .3 + .5 * pulse();
+            X.font = '500 18px "Inter",sans-serif'; X.fillStyle = P.tx4; X.textAlign = 'center';
+            X.fillText('Press Next → to begin', W / 2, H / 2 + 130);
+            X.restore();
+
+            X.restore();
+        }
+
+        /* ═══ HEADER ═══ */
+        function drawHeader() {
+            if (step === 0) return;
+            X.save();
+            const hg = X.createLinearGradient(0, 0, W, 0);
+            hg.addColorStop(0, P.blue); hg.addColorStop(.35, P.purple); hg.addColorStop(.65, P.yellow); hg.addColorStop(1, P.red);
+            X.fillStyle = hg; X.fillRect(0, 0, W, 3);
+
+            X.font = '800 22px "Inter","Segoe UI",sans-serif'; X.fillStyle = P.tx; X.textAlign = 'left';
+            X.fillText('JavaScript Temporal Dead Zone (TDZ)', 24, 36);
+
+            X.font = '600 14px "Inter",sans-serif'; X.fillStyle = P.tx4; X.textAlign = 'right';
+            X.fillText('let & const vs var', W - 24, 36);
+            X.restore();
+        }
+
+        /* ═══ TIMELINE ═══ */
+        function drawTimeline(a) {
+            if (step < 2) return;
+            X.save(); X.globalAlpha = a;
+            const ty = 68, tw = W - 80, tx0 = 40;
+
+            // track
+            fillRR(tx0, ty, tw, 50, 12, P.bg2);
+            strokeRR(tx0, ty, tw, 50, 12, P.border, 1);
+
+            const stages = [
+                { label: '🚀 Program Starts', col: P.blue, x: .05, active: step >= 2 },
+                { label: '🧠 Creation Phase', col: P.purple, x: .28, active: step >= 3 },
+                { label: '🔴 console.log(score)', col: step >= 5 ? P.red : P.tx4, x: .55, active: step >= 5 },
+                { label: '⚪ let score = 95', col: P.gray, x: .82, active: false, locked: true },
+            ];
+
+            // connection line
+            const lineY = ty + 25;
+            X.strokeStyle = P.bg3; X.lineWidth = 3;
+            X.beginPath(); X.moveTo(tx0 + 40, lineY); X.lineTo(tx0 + tw - 40, lineY); X.stroke();
+
+            // progress line
+            if (step >= 2) {
+                let prog = .15;
+                if (step >= 3) prog = .38;
+                if (step >= 5) prog = .65;
+                const da = eOut(clamp(a));
+                const progW = (tw - 80) * prog * da;
+                X.strokeStyle = step >= 5 ? P.red : P.blue; X.lineWidth = 3;
+                X.beginPath(); X.moveTo(tx0 + 40, lineY); X.lineTo(tx0 + 40 + progW, lineY); X.stroke();
+                // glow
+                X.save(); X.shadowColor = step >= 5 ? P.red : P.blue; X.shadowBlur = 12;
+                X.strokeStyle = step >= 5 ? P.red : P.blue; X.lineWidth = 2;
+                X.beginPath(); X.moveTo(tx0 + 40, lineY); X.lineTo(tx0 + 40 + progW, lineY); X.stroke();
+                X.restore();
+            }
+
+            stages.forEach((s, i) => {
+                const sx2 = tx0 + tw * s.x;
+                const isActive = s.active && (i < step - 1 || step === STEPS.length - 1 || i <= step - 2 + 1);
+                const dotA = isActive ? 1 : .3;
+                const appear = i <= step - 2 ? 1 : eOut(clamp(a));
+
+                X.save(); X.globalAlpha *= appear;
+
+                // dot
+                if (s.active && !s.locked) {
+                    X.save(); X.shadowColor = s.col; X.shadowBlur = 14;
+                    X.fillStyle = s.col; X.beginPath(); X.arc(sx2, lineY, 10, 0, Math.PI * 2); X.fill();
+                    X.restore();
+                    X.fillStyle = s.col; X.beginPath(); X.arc(sx2, lineY, 10, 0, Math.PI * 2); X.fill();
+                    X.fillStyle = '#fff'; X.beginPath(); X.arc(sx2, lineY, 4, 0, Math.PI * 2); X.fill();
+                } else {
+                    X.fillStyle = P.bg3; X.beginPath(); X.arc(sx2, lineY, 10, 0, Math.PI * 2); X.fill();
+                    X.strokeStyle = s.col + '60'; X.lineWidth = 2; X.beginPath(); X.arc(sx2, lineY, 10, 0, Math.PI * 2); X.stroke();
+                    if (s.locked) {
+                        X.font = '14px "Inter"'; X.textAlign = 'center'; X.fillStyle = P.gray;
+                        X.fillText('🔒', sx2, lineY + 5);
+                    }
+                }
+
+                // label
+                X.font = '700 14px "Inter",sans-serif'; X.textAlign = 'center';
+                X.fillStyle = s.active ? s.col : P.tx4;
+                X.fillText(s.label, sx2, ty + ty > 60 ? ty - 6 : ty + 72);
+
+                X.restore();
+            });
+
+            // TDZ zone highlight
+            if (step >= 4) {
+                const tdzStart = tx0 + tw * .12;
+                const tdzEnd = tx0 + tw * .76;
+                const tdzA = step === 4 ? eOut(a) : .6;
+                X.save(); X.globalAlpha = tdzA * .15;
+                X.fillStyle = P.yellow;
+                X.fillRect(tdzStart, ty + 2, tdzEnd - tdzStart, 46);
+                X.restore();
+                X.save(); X.globalAlpha = tdzA;
+                X.strokeStyle = P.yellow + '80'; X.lineWidth = 2; X.setLineDash([6, 4]);
+                X.strokeRect(tdzStart, ty + 2, tdzEnd - tdzStart, 46);
+                X.setLineDash([]);
+
+                X.font = '800 12px "Inter",sans-serif'; X.fillStyle = P.yellowL; X.textAlign = 'center';
+                X.fillText('◀── TEMPORAL DEAD ZONE ──▶', (tdzStart + tdzEnd) / 2, ty + 50 + 16);
+                X.restore();
+            }
+
+            // Execution stopped indicator
+            if (step >= 5) {
+                const stopA = step === 5 ? eOut(a) : 1;
+                X.save(); X.globalAlpha = stopA;
+                const stopX = tx0 + tw * .55;
+                fillRR(stopX - 70, ty + 50 + 4, 150, 26, 6, P.redBg);
+                strokeRR(stopX - 70, ty + 50 + 4, 150, 26, 6, P.red + '40', 1);
+                X.font = '700 12px "Inter",sans-serif'; X.fillStyle = P.redL; X.textAlign = 'center';
+                X.fillText('⛔ Execution stops here', stopX + 5, ty + 50 + 22);
+                X.restore();
+            }
+
+            X.restore();
+        }
+
+        /* ═══ CODE PANEL ═══ */
+        function drawCode(a) {
+            const cx = 40, cy = 148, cw = 520, ch = 260;
+            X.save(); X.globalAlpha = a;
+            panel(cx, cy, cw, ch, 'SOURCE CODE', P.blueL, '📝');
+
+            ['#ef4444', '#f59e0b', '#22c55e'].forEach((c, i) => {
+                X.fillStyle = c; X.beginPath(); X.arc(cx + cw - 60 + i * 20, cy + 24, 5.5, 0, Math.PI * 2); X.fill()
+            });
+
+            const mono = '700 18px "SF Mono","Fira Code","Cascadia Code",Consolas,monospace';
+            const kw = '#c084fc', fn = '#60a5fa', str = '#34d399', nm = '#fbbf24', op = '#94a3b8';
+
+            const lines = [
+                [{ t: 'console', c: '#c4b5fd' }, { t: '.', c: op }, { t: 'log', c: fn }, { t: '(', c: op }, { t: 'score', c: nm }, { t: ')', c: op }, { t: ';', c: op }],
+                [{ t: 'let ', c: kw }, { t: 'score', c: nm }, { t: ' = ', c: op }, { t: '95', c: '#fb923c' }, { t: ';', c: op }],
+            ];
+
+            X.font = mono; X.textAlign = 'left';
+            lines.forEach((toks, i) => {
+                const ly = cy + 80 + i * 50;
+
+                // line number
+                X.fillStyle = P.tx4; X.font = '600 14px "SF Mono",Consolas,monospace';
+                X.fillText(String(i + 1), cx + 16, ly + 6);
+
+                // greyed out line 2 at step>=5
+                const isLine2 = i === 1;
+                const greyOut = isLine2 && step >= 5;
+
+                X.font = mono;
+                let tx2 = cx + 50;
+
+                X.save();
+                if (greyOut) X.globalAlpha = .25;
+                toks.forEach(tok => {
+                    X.fillStyle = greyOut ? P.tx4 : tok.c;
+                    X.fillText(tok.t, tx2, ly + 6);
+                    tx2 += X.measureText(tok.t).width;
+                });
+                X.restore();
+
+                // Lock icon on line 2
+                if (greyOut && step >= 6) {
+                    const la = step === 6 ? eOut(anim) : 1;
+                    X.save(); X.globalAlpha = la;
+                    X.font = '20px "Inter"'; X.fillText('🔒', cx + cw - 50, ly + 8);
+                    X.restore();
+                }
+            });
+
+            // Line highlights
+            if (step >= 5) {
+                const ly1 = cy + 80;
+                X.save(); X.globalAlpha = .15 + .08 * pulse();
+                X.fillStyle = P.red; rr(cx + 8, ly1 - 16, cw - 16, 40, 7); X.fill();
+                X.restore();
+                strokeRR(cx + 8, ly1 - 16, cw - 16, 40, 7, P.red + '80', 2);
+                // left accent
+                X.fillStyle = P.red; X.fillRect(cx + 8, ly1 - 16, 4, 40);
+            }
+
+            if (step >= 6) {
+                const ly2 = cy + 130;
+                X.save(); X.globalAlpha = .08;
+                X.fillStyle = P.gray; rr(cx + 8, ly2 - 16, cw - 16, 40, 7); X.fill();
+                X.restore();
+                strokeRR(cx + 8, ly2 - 16, cw - 16, 40, 7, P.gray + '40', 1.5);
+                X.fillStyle = P.gray + '80'; X.fillRect(cx + 8, ly2 - 16, 4, 40);
+            }
+
+            // Execution pointer
+            if (step >= 5 && step < 7) {
+                const epy = cy + 80;
+                X.save(); X.globalAlpha = .9;
+                X.fillStyle = P.red; X.font = '18px "Inter"'; X.textAlign = 'right';
+                X.fillText('▶', cx + 47, epy + 7);
+                X.restore();
+            }
+
+            // Phase badges
+            if (step >= 3 && step <= 4) {
+                phaseBadge(cx + cw - 200, cy + ch - 30, '⚙ CREATION PHASE', P.purpleD, eOut(clamp(a)));
+            }
+            if (step >= 5) {
+                phaseBadge(cx + cw - 210, cy + ch - 30, '🔴 EXECUTION HALTED', P.redD, 1);
+            }
+
+            X.restore();
+        }
+
+        /* ═══ MEMORY CARD ═══ */
+        function drawMemoryCard(a) {
+            if (step < 3) return;
+            const mx = 580, my = 148, mw = 460, mh = 260;
+            X.save(); X.globalAlpha = a;
+
+            const isError = step >= 5;
+            const isTDZ = step >= 3 && step < 5;
+            const borderCol = isError ? P.red : isTDZ ? P.yellow : P.purple;
+
+            if (isError) { glowBox(mx, my, mw, mh, P.red, .6 + .3 * pulse()) }
+            else if (isTDZ) { glowBox(mx, my, mw, mh, P.yellow, .4 + .2 * pulse()) }
+
+            panel(mx, my, mw, mh, 'MEMORY', isError ? P.redL : isTDZ ? P.yellowL : P.purpleL, '🧠');
+            strokeRR(mx, my, mw, mh, 16, borderCol + '60', 2);
+
+            const startY = my + 62;
+
+            // Variable name
+            X.font = '800 20px "SF Mono",Consolas,monospace'; X.textAlign = 'left';
+            X.fillStyle = isError ? P.redL : P.yellowL;
+            X.fillText('score', mx + 24, startY + 6);
+
+            // Status rows
+            const rows = [];
+            if (step >= 3 && step < 5) {
+                rows.push({ label: 'Exists in memory', val: '✅', vc: P.greenL });
+                rows.push({ label: 'Initialized', val: '❌', vc: P.redL });
+                rows.push({ label: 'Value', val: '<uninitialized>', vc: P.yellowL });
+                rows.push({ label: 'Status', val: 'Temporal Dead Zone (TDZ)', vc: P.yellow, bold: true });
+            }
+            if (step >= 5) {
+                rows.push({ label: 'Exists in memory', val: '✅', vc: P.greenL });
+                rows.push({ label: 'Initialized', val: '❌', vc: P.redL });
+                rows.push({ label: 'Access attempt', val: '❌ BLOCKED', vc: P.redL, bold: true });
+                rows.push({ label: 'Status', val: 'ReferenceError', vc: P.red, bold: true });
+            }
+
+            rows.forEach((r, i) => {
+                const ry = startY + 30 + i * 38;
+                const da = eOut(clamp((a - .1 * i) * 3));
+                X.save(); X.globalAlpha *= da;
+
+                fillRR(mx + 18, ry, mw - 36, 32, 6, isError ? P.redBg : P.yellowBg);
+
+                X.font = '600 14px "Inter",sans-serif'; X.textAlign = 'left';
+                X.fillStyle = P.tx3; X.fillText(r.label + ':', mx + 30, ry + 22);
+
+                X.font = (r.bold ? '800' : '600') + ' 14px "Inter",sans-serif';
+                X.fillStyle = r.vc; X.textAlign = 'right';
+                X.fillText(r.val, mx + mw - 30, ry + 22);
+
+                X.restore();
+            });
+
+            X.restore();
+        }
+
+        /* ═══ ERROR DISPLAY ═══ */
+        function drawError(a) {
+            if (step < 5) return;
+            const ex = 1060, ey = 148, ew = 820, eh = 160;
+            X.save(); X.globalAlpha = a;
+
+            glowBox(ex, ey, ew, eh, P.red, .5 + .3 * pulse());
+            fillRR(ex, ey, ew, eh, 16, P.redBg);
+            strokeRR(ex, ey, ew, eh, 16, P.red + '60', 2);
+
+            // Red accent bar
+            X.fillStyle = P.red; X.fillRect(ex, ey + 16, 5, eh - 32);
+
+            // Icon
+            X.font = '44px "Inter"'; X.textAlign = 'left';
+            X.fillText('❌', ex + 24, ey + 62);
+
+            // Error title
+            X.font = '900 26px "Inter","Segoe UI",sans-serif'; X.fillStyle = P.redL;
+            X.fillText('ReferenceError', ex + 80, ey + 56);
+
+            // Error message
+            X.font = '600 20px "SF Mono",Consolas,monospace'; X.fillStyle = P.red;
+            X.fillText("Cannot access 'score'", ex + 30, ey + 98);
+            X.fillText('before initialization', ex + 30, ey + 128);
+
+            // Uncaught badge
+            phaseBadge(ex + ew - 200, ey + 24, '⛔ UNCAUGHT ERROR', P.redD, a);
+
+            X.restore();
+        }
+
+        /* ═══ UNREACHABLE CODE CARD ═══ */
+        function drawUnreachable(a) {
+            if (step < 6) return;
+            const ux = 1060, uy = 328, uw = 820, uh = 80;
+            X.save(); X.globalAlpha = a;
+
+            fillRR(ux, uy, uw, uh, 14, P.grayBg);
+            strokeRR(ux, uy, uw, uh, 14, P.gray + '30', 1.5);
+
+            X.font = '22px "Inter"'; X.textAlign = 'left';
+            X.fillText('🔒', ux + 20, uy + 48);
+
+            X.font = '700 18px "Inter","Segoe UI",sans-serif'; X.fillStyle = P.grayL;
+            X.fillText('let score = 95', ux + 56, uy + 36);
+
+            X.font = '600 16px "Inter",sans-serif'; X.fillStyle = P.tx4;
+            X.fillText('—  Not Executed  •  Skipped because execution already stopped', ux + 56, uy + 62);
+
+            // strikethrough on code
+            X.strokeStyle = P.gray; X.lineWidth = 2;
+            X.beginPath(); X.moveTo(ux + 56, uy + 30); X.lineTo(ux + 56 + X.measureText('let score = 95').width + 10, uy + 30); X.stroke();
+
+            X.restore();
+        }
+
+        /* ═══ EXPLANATION BOXES ═══ */
+        function drawExplanation(a) {
+            if (step < 3) return;
+
+            const ex = 40, ew = 520;
+
+            // Creation phase explanation
+            if (step >= 3 && step <= 4) {
+                const ey = 430, eh = 180;
+                X.save(); X.globalAlpha = a;
+
+                fillRR(ex, ey, ew, eh, 14, P.purpleBg);
+                strokeRR(ex, ey, ew, eh, 14, P.purple + '30', 1.5);
+
+                X.fillStyle = P.purple; X.fillRect(ex, ey + 16, 4, eh - 32);
+
+                X.font = '800 18px "Inter","Segoe UI",sans-serif'; X.fillStyle = P.purpleL; X.textAlign = 'left';
+                X.fillText('🧠 What happens during Creation Phase?', ex + 20, ey + 36);
+
+                const lines = [
+                    'JavaScript hoists the declaration of let score,',
+                    'but it does NOT initialize it.',
+                    '',
+                    'The variable exists in memory but is in the',
+                    'Temporal Dead Zone (TDZ).',
+                ];
+
+                X.font = '500 15px "Inter",sans-serif';
+                lines.forEach((l, i) => {
+                    if (!l) return;
+                    X.fillStyle = i === 1 || i === 4 ? P.yellowL : P.tx2;
+                    X.font = i === 1 || i === 4 ? '700 15px "Inter",sans-serif' : '500 15px "Inter",sans-serif';
+                    X.fillText(l, ex + 20, ey + 66 + i * 24);
+                });
+
+                X.restore();
+            }
+
+            // TDZ explanation
+            if (step === 4) {
+                const ey2 = 430, eh2 = 180;
+                const bx = 580, bw = 460;
+                X.save(); X.globalAlpha = eOut(clamp(a));
+
+                fillRR(bx, ey2, bw, eh2, 14, P.yellowBg);
+                strokeRR(bx, ey2, bw, eh2, 14, P.yellow + '30', 1.5);
+
+                X.fillStyle = P.yellow; X.fillRect(bx, ey2 + 16, 4, eh2 - 32);
+
+                X.font = '800 18px "Inter","Segoe UI",sans-serif'; X.fillStyle = P.yellowL; X.textAlign = 'left';
+                X.fillText('⚠️ Temporal Dead Zone (TDZ)', bx + 20, ey2 + 36);
+
+                const lines2 = [
+                    'The TDZ is the period between:',
+                    '  → Scope creation (variable is hoisted)',
+                    '  → Initialization (let score = 95)',
+                    '',
+                    'Any access during this period',
+                    'throws a ReferenceError.',
+                ];
+
+                X.font = '500 15px "Inter",sans-serif';
+                lines2.forEach((l, i) => {
+                    if (!l) return;
+                    X.fillStyle = i === 5 ? P.redL : P.tx2;
+                    X.font = i === 5 ? '700 15px "Inter",sans-serif' : '500 15px "Inter",sans-serif';
+                    X.fillText(l, bx + 20, ey2 + 66 + i * 24);
+                });
+
+                X.restore();
+            }
+        }
+
+        /* ═══ ACCESS ATTEMPT ARROW ═══ */
+        function drawAccessArrow(a) {
+            if (step !== 5) return;
+            const aa = eOut(clamp(a));
+            X.save(); X.globalAlpha = aa;
+
+            // Arrow from code line 1 to memory card
+            const fx = 560, fy = 228;
+            const tx2 = 580, ty2 = 220;
+
+            // Animated dashed
+            X.strokeStyle = P.red; X.lineWidth = 3;
+            X.setLineDash([10, 8]); X.lineDashOffset = -now() * .05;
+            X.beginPath(); X.moveTo(fx, fy); X.lineTo(tx2, ty2); X.stroke();
+            X.setLineDash([]);
+
+            // "Trying to access" label
+            fillRR(fx - 20, fy + 10, 200, 30, 7, P.redBg);
+            strokeRR(fx - 20, fy + 10, 200, 30, 7, P.red + '40', 1);
+            X.font = '700 13px "Inter",sans-serif'; X.fillStyle = P.redL; X.textAlign = 'center';
+            X.fillText('🔍 Accessing score...', fx + 80, fy + 30);
+
+            X.restore();
+        }
+
+        /* ═══ KEY CONCEPTS ═══ */
+        function drawKeyConcepts(a) {
+            if (step < 7) return;
+            const kx = 40, ky = 430, kw = 620, kh = 330;
+            X.save(); X.globalAlpha = a;
+
+            fillRR(kx, ky, kw, kh, 16, P.blueBg);
+            strokeRR(kx, ky, kw, kh, 16, P.blue + '30', 1.5);
+
+            X.font = '800 22px "Inter","Segoe UI",sans-serif'; X.fillStyle = P.blueL; X.textAlign = 'left';
+            X.fillText('💡 Key Concepts', kx + 22, ky + 38);
+
+            const items = [
+                { t: 'let and const are hoisted.', icon: '✅' },
+                { t: 'They are not initialized during creation phase.', icon: '✅' },
+                { t: 'The period between scope creation and', icon: '✅', sub: 'initialization is called the TDZ.' },
+                { t: 'Accessing during TDZ throws a ReferenceError.', icon: '✅' },
+                { t: 'An uncaught ReferenceError stops execution,', icon: '✅', sub: 'so let score = 95 is never reached.' },
+            ];
+
+            items.forEach((it, i) => {
+                const iy = ky + 68 + i * 50;
+                const da = eOut(clamp((a - .08 * i) * 3));
+                X.save(); X.globalAlpha *= da;
+
+                fillRR(kx + 16, iy - 6, kw - 32, it.sub ? 46 : 38, 8, P.bg2);
+
+                X.font = '700 15px "Inter",sans-serif'; X.fillStyle = P.greenL; X.textAlign = 'left';
+                X.fillText(it.icon, kx + 28, iy + 14);
+
+                X.font = '500 15px "Inter",sans-serif'; X.fillStyle = P.tx;
+                X.fillText(it.t, kx + 54, iy + 14);
+
+                if (it.sub) {
+                    X.fillStyle = P.yellowL; X.font = '700 15px "Inter",sans-serif';
+                    X.fillText(it.sub, kx + 54, iy + 36);
+                }
+
+                X.restore();
+            });
+
+            X.restore();
+        }
+
+        /* ═══ COMPARISON TABLE ═══ */
+        function drawComparison(a) {
+            if (step < 7) return;
+            const cx2 = 680, cy2 = 430, cw2 = 830, ch2 = 330;
+            X.save(); X.globalAlpha = a;
+
+            fillRR(cx2, cy2, cw2, ch2, 16, P.bg2);
+            strokeRR(cx2, cy2, cw2, ch2, 16, P.border, 1.5);
+
+            X.font = '800 22px "Inter","Segoe UI",sans-serif'; X.fillStyle = P.tx; X.textAlign = 'center';
+            X.fillText('var  vs  let / const', cx2 + cw2 / 2, cy2 + 36);
+
+            // Column headers
+            const c1 = cx2 + 20, c2 = cx2 + 320, c3 = cx2 + 540;
+            const colW1 = 280, colW2 = 200, colW3 = 270;
+            const hdrY = cy2 + 52;
+
+            fillRR(c1, hdrY, colW1, 34, 6, P.bg3);
+            X.font = '800 14px "Inter",sans-serif'; X.fillStyle = P.tx3; X.textAlign = 'center';
+            X.fillText('Feature', c1 + colW1 / 2, hdrY + 24);
+
+            fillRR(c2, hdrY, colW2, 34, 6, P.blueBg);
+            X.fillStyle = P.blueL; X.fillText('var', c2 + colW2 / 2, hdrY + 24);
+
+            fillRR(c3, hdrY, colW3, 34, 6, P.purpleBg);
+            X.fillStyle = P.purpleL; X.fillText('let / const', c3 + colW3 / 2, hdrY + 24);
+
+            const rows = [
+                { feature: 'Hoisted', v: '✅ Yes', l: '✅ Yes', vc: P.greenL, lc: P.greenL },
+                { feature: 'Initialized during creation', v: 'undefined', l: '❌ No', vc: P.yellowL, lc: P.redL },
+                { feature: 'Accessible before decl.', v: '✅ Yes', l: '❌ No', vc: P.greenL, lc: P.redL },
+                { feature: 'Temporal Dead Zone', v: '❌ No', l: '✅ Yes', vc: P.grayL, lc: P.yellowL },
+                { feature: 'Result before declaration', v: 'undefined', l: 'ReferenceError', vc: P.yellowL, lc: P.redL },
+            ];
+
+            rows.forEach((r, i) => {
+                const ry = hdrY + 44 + i * 44;
+                const da = eOut(clamp((a - .06 * i) * 3));
+                X.save(); X.globalAlpha *= da;
+
+                const bg = i % 2 ? P.bg2 : 'rgba(51,65,85,.3)';
+                fillRR(c1, ry, colW1, 38, 4, bg);
+                fillRR(c2, ry, colW2, 38, 4, bg);
+                fillRR(c3, ry, colW3, 38, 4, bg);
+
+                X.font = '600 14px "Inter",sans-serif'; X.textAlign = 'center';
+                X.fillStyle = P.tx2; X.fillText(r.feature, c1 + colW1 / 2, ry + 26);
+                X.fillStyle = r.vc; X.fillText(r.v, c2 + colW2 / 2, ry + 26);
+                X.fillStyle = r.lc; X.font = '700 14px "Inter",sans-serif'; X.fillText(r.l, c3 + colW3 / 2, ry + 26);
+
+                X.restore();
+            });
+
+            X.restore();
+        }
+
+        /* ═══ var BEHAVIOR MINI ═══ */
+        function drawVarMini(a) {
+            if (step < 7) return;
+            const vx = 1520, vy = 430, vw = 370, vh = 330;
+            X.save(); X.globalAlpha = a;
+
+            fillRR(vx, vy, vw, vh, 16, P.greenBg);
+            strokeRR(vx, vy, vw, vh, 16, P.green + '30', 1.5);
+
+            X.font = '800 18px "Inter","Segoe UI",sans-serif'; X.fillStyle = P.greenL; X.textAlign = 'left';
+            X.fillText('📗 How var behaves:', vx + 18, vy + 34);
+
+            // mini code
+            fillRR(vx + 14, vy + 50, vw - 28, 90, 10, P.bg);
+            strokeRR(vx + 14, vy + 50, vw - 28, 90, 10, P.border, 1);
+
+            X.font = '600 15px "SF Mono",Consolas,monospace'; X.textAlign = 'left';
+            X.fillStyle = '#94a3b8'; X.fillText('console', vx + 28, vy + 78);
+            X.fillStyle = '#64748b'; X.fillText('.', vx + 28 + X.measureText('console').width, vy + 78);
+            X.fillStyle = '#60a5fa'; X.fillText('log', vx + 28 + X.measureText('console.').width, vy + 78);
+            X.fillStyle = '#94a3b8'; X.fillText('(x);', vx + 28 + X.measureText('console.log').width, vy + 78);
+
+            X.fillStyle = '#c084fc'; X.fillText('var ', vx + 28, vy + 108);
+            X.fillStyle = '#fbbf24'; X.fillText('x', vx + 28 + X.measureText('var ').width, vy + 108);
+            X.fillStyle = '#94a3b8'; X.fillText(' = 10;', vx + 28 + X.measureText('var x').width, vy + 108);
+
+            // Result
+            fillRR(vx + 14, vy + 155, vw - 28, 44, 8, P.bg2);
+            X.font = '700 16px "SF Mono",Consolas,monospace';
+            X.fillStyle = P.greenL; X.textAlign = 'left';
+            X.fillText('> undefined', vx + 28, vy + 184);
+
+            // Explanation
+            X.font = '500 14px "Inter",sans-serif'; X.fillStyle = P.tx2;
+            X.fillText('var is hoisted AND initialized', vx + 18, vy + 226);
+            X.fillText('with undefined. No TDZ!', vx + 18, vy + 248);
+
+            // vs badge
+            fillRR(vx + 14, vy + 268, vw - 28, 44, 8, P.yellowBg);
+            strokeRR(vx + 14, vy + 268, vw - 28, 44, 8, P.yellow + '30', 1);
+            X.font = '700 14px "Inter",sans-serif'; X.fillStyle = P.yellowL; X.textAlign = 'center';
+            X.fillText('let/const → ReferenceError 💥', vx + vw / 2, vy + 296);
+
+            X.restore();
+        }
+
+        /* ═══ STEP 2 — Program starts ═══ */
+        function drawProgramStart(a) {
+            if (step !== 2) return;
+            X.save(); X.globalAlpha = a;
+
+            const bx = 580, by = 148, bw = 460, bh = 140;
+            fillRR(bx, by, bw, bh, 16, P.blueBg);
+            strokeRR(bx, by, bw, bh, 16, P.blue + '40', 2);
+
+            X.font = '36px "Inter"'; X.textAlign = 'left'; X.fillText('🚀', bx + 20, by + 60);
+            X.font = '800 24px "Inter","Segoe UI",sans-serif'; X.fillStyle = P.blueL;
+            X.fillText('Execution Begins', bx + 70, by + 54);
+
+            X.font = '500 17px "Inter",sans-serif'; X.fillStyle = P.tx2;
+            X.fillText('The JavaScript engine starts processing', bx + 24, by + 90);
+            X.fillText('your code from top to bottom.', bx + 24, by + 116);
+
+            X.restore();
+        }
+
+        /* ═══ MAIN RENDER ═══ */
+        function render() {
+            X.clearRect(0, 0, W, H);
+            X.fillStyle = P.bg; X.fillRect(0, 0, W, H);
+
+            // subtle grid
+            X.save(); X.globalAlpha = .025; X.strokeStyle = '#fff'; X.lineWidth = 1;
+            for (let gx = 0; gx < W; gx += 60) { X.beginPath(); X.moveTo(gx, 0); X.lineTo(gx, H); X.stroke() }
+            for (let gy = 0; gy < H; gy += 60) { X.beginPath(); X.moveTo(0, gy); X.lineTo(W, gy); X.stroke() }
+            X.restore();
+
+            const a = clamp(anim);
+
+            if (step === 0) { drawTitle(eOut(a)); return }
+
+            drawHeader();
+            drawTimeline(step >= 2 ? (step === 2 ? eOut(a) : 1) : 0);
+
+            if (step >= 1) { drawCode(step === 1 ? eOut(a) : 1) }
+
+            drawProgramStart(step === 2 ? eOut(a) : 0);
+
+            if (step >= 3) { drawMemoryCard(step === 3 ? eBack(a) : 1) }
+
+            drawExplanation(step === 3 ? eOut(a) : (step === 4 ? 1 : 0));
+
+            drawAccessArrow(step === 5 ? eOut(a) : 0);
+
+            if (step >= 5) { drawError(step === 5 ? eElastic(a) : 1) }
+
+            if (step >= 6) { drawUnreachable(step === 6 ? eBack(a) : 1) }
+
+            if (step >= 7) {
+                const fa = step === 7 ? eOut(a) : 1;
+                drawKeyConcepts(fa);
+                drawComparison(fa);
+                drawVarMini(fa);
+            }
+        }
+
+        let lastT = 0;
+        function loop(ts) { const dt = (ts - lastT) / 1000; lastT = ts; anim = clamp(anim + dt * (1000 / AD)); render(); requestAnimationFrame(loop) }
+        requestAnimationFrame(loop);
+    </script>
+</body>
+
+</html>
