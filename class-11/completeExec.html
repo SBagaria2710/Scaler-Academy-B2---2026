@@ -1,0 +1,1549 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JavaScript Engine Internals</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        background: #0f172a;
+        font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+
+      #wrap {
+        width: 1920px;
+        height: 1080px;
+        transform-origin: top center;
+        position: relative;
+      }
+
+      canvas {
+        display: block;
+      }
+
+      #bar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(15, 23, 42, 0.95);
+        backdrop-filter: blur(20px);
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 16px 24px;
+        z-index: 200;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+
+      .b {
+        padding: 14px 44px;
+        border: none;
+        border-radius: 12px;
+        font:
+          600 19px/1 "Inter",
+          "Segoe UI",
+          sans-serif;
+        cursor: pointer;
+        transition: all 0.2s;
+        user-select: none;
+      }
+
+      .b:active {
+        transform: scale(0.95);
+      }
+
+      #prev {
+        background: rgba(255, 255, 255, 0.08);
+        color: #94a3b8;
+      }
+
+      #prev:hover {
+        background: rgba(255, 255, 255, 0.14);
+        color: #e2e8f0;
+      }
+
+      #next {
+        background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+        color: #fff;
+        box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+      }
+
+      #next:hover {
+        box-shadow: 0 4px 28px rgba(59, 130, 246, 0.5);
+      }
+
+      #info {
+        font:
+          600 18px/1.4 "Inter",
+          "Segoe UI",
+          sans-serif;
+        color: #94a3b8;
+        min-width: 380px;
+        text-align: center;
+        padding: 8px 20px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      #info .n {
+        color: #60a5fa;
+        font-weight: 700;
+      }
+
+      #info .t {
+        color: #e2e8f0;
+      }
+
+      .keys {
+        font:
+          400 15px "Inter",
+          "Segoe UI",
+          sans-serif;
+        color: #475569;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="wrap"><canvas id="c" width="1920" height="1080"></canvas></div>
+    <div id="bar">
+      <button class="b" id="prev">◀ Back</button>
+      <div id="info">
+        <span class="n">1</span> / 20 — <span class="t">Ready</span>
+      </div>
+      <button class="b" id="next">Next ▶</button>
+      <div class="keys">← → arrow keys &nbsp;|&nbsp; spacebar</div>
+    </div>
+    <script>
+      const cv = document.getElementById("c"),
+        X = cv.getContext("2d"),
+        W = 1920,
+        H = 1080;
+      function fit() {
+        const s = Math.min(
+          window.innerWidth / W,
+          (window.innerHeight - 70) / H,
+          1,
+        );
+        document.getElementById("wrap").style.transform = `scale(${s})`;
+      }
+      fit();
+      window.addEventListener("resize", fit);
+
+      /* ═══ COLORS ═══ */
+      const P = {
+        bg: "#0f172a",
+        bg2: "#1e293b",
+        bg3: "#334155",
+        tx: "#f1f5f9",
+        tx2: "#cbd5e1",
+        tx3: "#94a3b8",
+        tx4: "#64748b",
+        blue: "#3b82f6",
+        blueD: "#1d4ed8",
+        blueL: "#93c5fd",
+        blueBg: "rgba(59,130,246,.08)",
+        purple: "#8b5cf6",
+        purpleD: "#6d28d9",
+        purpleL: "#c4b5fd",
+        purpleBg: "rgba(139,92,246,.08)",
+        green: "#10b981",
+        greenD: "#059669",
+        greenL: "#6ee7b7",
+        greenBg: "rgba(16,185,129,.08)",
+        orange: "#f97316",
+        orangeD: "#ea580c",
+        orangeL: "#fdba74",
+        orangeBg: "rgba(249,115,22,.08)",
+        red: "#ef4444",
+        redD: "#dc2626",
+        redL: "#fca5a5",
+        redBg: "rgba(239,68,68,.08)",
+        cyan: "#06b6d4",
+        cyanD: "#0891b2",
+        cyanL: "#67e8f9",
+        cyanBg: "rgba(6,182,212,.08)",
+        amber: "#f59e0b",
+        amberL: "#fcd34d",
+        pink: "#ec4899",
+        pinkL: "#f9a8d4",
+        border: "rgba(255,255,255,.06)",
+        borderL: "rgba(255,255,255,.12)",
+        glow: "rgba(59,130,246,.15)",
+      };
+
+      /* ═══ EASING ═══ */
+      const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+      const eOut = (t) => 1 - Math.pow(1 - t, 3);
+      const eBack = (t) => {
+        const c = 1.70158;
+        return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2);
+      };
+      const eElastic = (t) => {
+        if (!t || t === 1) return t;
+        return (
+          Math.pow(2, -10 * t) * Math.sin(((t * 10 - 0.75) * 2 * Math.PI) / 3) +
+          1
+        );
+      };
+      const lerp = (a, b, t) => a + (b - a) * t;
+      const pulse = () => 0.5 + 0.5 * Math.sin(performance.now() * 0.003);
+      const now = () => performance.now();
+
+      /* ═══ STEPS ═══ */
+      const STEPS = [
+        { id: 0, label: "Title — How JS Executes Code" },
+        { id: 1, label: "Show Source Code" },
+        { id: 2, label: "Global Creation Phase Begins" },
+        { id: 3, label: "Register Declarations" },
+        { id: 4, label: "Store Function in Memory" },
+        { id: 5, label: "Global Creation Complete" },
+        { id: 6, label: "Execution Phase Begins" },
+        { id: 7, label: 'Assign name = "Alice"' },
+        { id: 8, label: "Assign age = 25" },
+        { id: 9, label: "Call greet() — New Context" },
+        { id: 10, label: "greet() Creation Phase" },
+        { id: 11, label: 'greet() Execution — Lookup "name"' },
+        { id: 12, label: "Scope Chain: greet → Global" },
+        { id: 13, label: 'Resolve name = "Alice"' },
+        { id: 14, label: "Initialize greeting" },
+        { id: 15, label: "console.log() output" },
+        { id: 16, label: "greet() returns — Pop Context" },
+        { id: 17, label: "Assign result" },
+        { id: 18, label: "console.log(result)" },
+        { id: 19, label: "Summary & Key Concepts" },
+      ];
+      let step = 0,
+        anim = 0;
+      const AD = 600;
+
+      function setStep(s) {
+        s = clamp(s, 0, STEPS.length - 1);
+        if (s === step) return;
+        step = s;
+        anim = 0;
+        document.getElementById("info").innerHTML =
+          `<span class="n">${step + 1}</span> / ${STEPS.length} — <span class="t">${STEPS[step].label}</span>`;
+      }
+      document.getElementById("next").onclick = () => setStep(step + 1);
+      document.getElementById("prev").onclick = () => setStep(step - 1);
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowRight" || e.key === " ") {
+          e.preventDefault();
+          setStep(step + 1);
+        }
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          setStep(step - 1);
+        }
+      });
+      setStep(0);
+
+      /* ═══ DRAW UTILS ═══ */
+      function rr(x, y, w, h, r = 12) {
+        X.beginPath();
+        X.moveTo(x + r, y);
+        X.lineTo(x + w - r, y);
+        X.quadraticCurveTo(x + w, y, x + w, y + r);
+        X.lineTo(x + w, y + h - r);
+        X.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        X.lineTo(x + r, y + h);
+        X.quadraticCurveTo(x, y + h, x, y + h - r);
+        X.lineTo(x, y + r);
+        X.quadraticCurveTo(x, y, x + r, y);
+        X.closePath();
+      }
+      function fillRR(x, y, w, h, r, col) {
+        X.fillStyle = col;
+        rr(x, y, w, h, r);
+        X.fill();
+      }
+      function strokeRR(x, y, w, h, r, col, lw = 1) {
+        X.strokeStyle = col;
+        X.lineWidth = lw;
+        rr(x, y, w, h, r);
+        X.stroke();
+      }
+
+      function panel(x, y, w, h, title, titleCol, icon) {
+        X.save();
+        // panel bg
+        const grad = X.createLinearGradient(x, y, x, y + h);
+        grad.addColorStop(0, "rgba(30,41,59,.92)");
+        grad.addColorStop(1, "rgba(15,23,42,.96)");
+        X.fillStyle = grad;
+        rr(x, y, w, h, 16);
+        X.fill();
+        strokeRR(x, y, w, h, 16, P.border, 1);
+        // header
+        fillRR(x, y, w, 44, 16, P.bg2);
+        X.fillRect(x, y + 32, w, 12);
+        strokeRR(x, y, w, 44, 16, "rgba(255,255,255,.04)", 1);
+        // header line
+        X.strokeStyle = P.border;
+        X.lineWidth = 1;
+        X.beginPath();
+        X.moveTo(x, y + 44);
+        X.lineTo(x + w, y + 44);
+        X.stroke();
+        // title
+        X.font = '700 18px "Inter","Segoe UI",sans-serif';
+        X.textAlign = "left";
+        X.fillStyle = titleCol;
+        X.fillText((icon || "") + " " + title, x + 16, y + 28);
+        X.restore();
+      }
+
+      function dashedLine(fx, fy, tx, ty, col, a, lw = 2) {
+        X.save();
+        X.globalAlpha = a;
+        X.strokeStyle = col;
+        X.lineWidth = lw;
+        X.setLineDash([8, 6]);
+        X.lineDashOffset = -now() * 0.04;
+        X.beginPath();
+        X.moveTo(fx, fy);
+        X.lineTo(tx, ty);
+        X.stroke();
+        X.setLineDash([]);
+        X.restore();
+      }
+
+      function arrowHead(tx, ty, angle, col, a, size = 10) {
+        X.save();
+        X.globalAlpha = a;
+        X.fillStyle = col;
+        X.beginPath();
+        X.moveTo(tx, ty);
+        X.lineTo(
+          tx - size * Math.cos(angle - Math.PI / 6),
+          ty - size * Math.sin(angle - Math.PI / 6),
+        );
+        X.lineTo(
+          tx - size * Math.cos(angle + Math.PI / 6),
+          ty - size * Math.sin(angle + Math.PI / 6),
+        );
+        X.closePath();
+        X.fill();
+        X.restore();
+      }
+
+      function dashedArrow(fx, fy, tx, ty, col, a, lw = 2) {
+        dashedLine(fx, fy, tx, ty, col, a, lw);
+        const an = Math.atan2(ty - fy, tx - fx);
+        arrowHead(tx, ty, an, col, a, 12);
+      }
+
+      function glowBox(x, y, w, h, col, intensity = 0.5) {
+        X.save();
+        X.shadowColor = col;
+        X.shadowBlur = 20 * intensity;
+        X.fillStyle = col + "08";
+        rr(x - 2, y - 2, w + 4, h + 4, 14);
+        X.fill();
+        X.restore();
+      }
+
+      function badge(x, y, txt, bg, fg, a) {
+        X.save();
+        X.globalAlpha = a;
+        X.font = '700 15px "Inter",sans-serif';
+        const tw = X.measureText(txt).width + 16;
+        fillRR(x, y - 10, tw, 20, 5, bg);
+        X.fillStyle = fg;
+        X.textAlign = "left";
+        X.fillText(txt, x + 8, y + 4);
+        X.restore();
+      }
+
+      function phaseBadge(x, y, text, col, a) {
+        X.save();
+        X.globalAlpha = a;
+        X.font = '800 15px "Inter",sans-serif';
+        const tw = X.measureText(text).width + 20;
+        fillRR(x, y - 12, tw, 24, 6, col);
+        X.fillStyle = "#fff";
+        X.textAlign = "left";
+        X.fillText(text, x + 10, y + 3);
+        X.restore();
+      }
+
+      /* ═══ SOURCE CODE PANEL ═══ */
+      const CODE_LINES = [
+        'let name = "Alice";',
+        "let age = 25;",
+        "",
+        "function greet(prefix) {",
+        "  let greeting = prefix + name;",
+        "  return greeting;",
+        "}",
+        "",
+        'let result = greet("Hello, ");',
+        "console.log(result);",
+      ];
+
+      function drawCode(a) {
+        const cx = 40,
+          cy = 90,
+          cw = 520,
+          ch = 580;
+        X.save();
+        X.globalAlpha = a;
+        panel(cx, cy, cw, ch, "SOURCE CODE", P.blueL, "");
+
+        // dots
+        ["#ef4444", "#f59e0b", "#22c55e"].forEach((c, i) => {
+          X.fillStyle = c;
+          X.beginPath();
+          X.arc(cx + cw - 60 + i * 18, cy + 22, 5, 0, Math.PI * 2);
+          X.fill();
+        });
+
+        const mono =
+          '500 19px "SF Mono","Fira Code","Cascadia Code",Consolas,monospace';
+        const monoB =
+          '700 19px "SF Mono","Fira Code","Cascadia Code",Consolas,monospace';
+
+        // syntax colors
+        const kw = P.purple,
+          fn = P.blue,
+          str = "#22d3ee",
+          nm = P.orangeL,
+          op = P.tx3,
+          cm = P.tx4,
+          vr = P.blueL;
+
+        const tokens = [
+          [
+            { t: "let ", c: kw },
+            { t: "name", c: nm },
+            { t: " = ", c: op },
+            { t: '"Alice"', c: str },
+            { t: ";", c: op },
+          ],
+          [
+            { t: "let ", c: kw },
+            { t: "age", c: nm },
+            { t: " = ", c: op },
+            { t: "25", c: P.amberL },
+            { t: ";", c: op },
+          ],
+          [],
+          [
+            { t: "function ", c: kw },
+            { t: "greet", c: fn },
+            { t: "(", c: op },
+            { t: "prefix", c: nm },
+            { t: ") {", c: op },
+          ],
+          [
+            { t: "  let ", c: kw },
+            { t: "greeting", c: nm },
+            { t: " = ", c: op },
+            { t: "prefix", c: nm },
+            { t: " + ", c: op },
+            { t: "name", c: nm },
+            { t: ";", c: op },
+          ],
+          [
+            { t: "  return ", c: kw },
+            { t: "greeting", c: nm },
+            { t: ";", c: op },
+          ],
+          [{ t: "}", c: op }],
+          [],
+          [
+            { t: "let ", c: kw },
+            { t: "result", c: nm },
+            { t: " = ", c: op },
+            { t: "greet", c: fn },
+            { t: "(", c: op },
+            { t: '"Hello, "', c: str },
+            { t: ");", c: op },
+          ],
+          [
+            { t: "console", c: vr },
+            { t: ".", c: op },
+            { t: "log", c: fn },
+            { t: "(", c: op },
+            { t: "result", c: nm },
+            { t: ");", c: op },
+          ],
+        ];
+
+        X.font = mono;
+        X.textAlign = "left";
+        tokens.forEach((toks, i) => {
+          const ly = cy + 70 + i * 44;
+          // line number
+          X.fillStyle = P.tx4;
+          X.font = '400 16px "SF Mono",Consolas,monospace';
+          X.fillText(String(i + 1).padStart(2, " "), cx + 14, ly + 8);
+          X.font = mono;
+          let tx2 = cx + 48;
+          toks.forEach((tok) => {
+            X.fillStyle = tok.c;
+            X.fillText(tok.t, tx2, ly + 8);
+            tx2 += X.measureText(tok.t).width;
+          });
+        });
+
+        // line highlights
+        const hls = [];
+        if (step === 3) {
+          hls.push({ l: 0, c: P.purple }, { l: 1, c: P.purple });
+        }
+        if (step === 4) {
+          hls.push(
+            { l: 3, c: P.blue },
+            { l: 4, c: P.blue },
+            { l: 5, c: P.blue },
+            { l: 6, c: P.blue },
+          );
+        }
+        if (step === 7) {
+          hls.push({ l: 0, c: P.green });
+        }
+        if (step === 8) {
+          hls.push({ l: 1, c: P.green });
+        }
+        if (step === 9 || step === 10) {
+          hls.push({ l: 8, c: P.orange });
+        }
+        if (step === 11 || step === 12 || step === 13) {
+          hls.push({ l: 4, c: P.cyan });
+        }
+        if (step === 14) {
+          hls.push({ l: 4, c: P.green });
+        }
+        if (step === 15) {
+          hls.push({ l: 5, c: P.green });
+        }
+        if (step === 16) {
+          hls.push({ l: 6, c: P.red });
+        }
+        if (step === 17) {
+          hls.push({ l: 8, c: P.green });
+        }
+        if (step === 18) {
+          hls.push({ l: 9, c: P.green });
+        }
+
+        hls.forEach((h) => {
+          const ly = cy + 70 + h.l * 38;
+          X.save();
+          X.globalAlpha = 0.1 + 0.05 * pulse();
+          X.fillStyle = h.c;
+          rr(cx + 6, ly - 15, cw - 12, 40, 6);
+          X.fill();
+          X.restore();
+          X.save();
+          X.globalAlpha = 0.5;
+          X.strokeStyle = h.c;
+          X.lineWidth = 1;
+          rr(cx + 6, ly - 15, cw - 12, 40, 6);
+          X.stroke();
+          X.restore();
+          // left accent
+          X.save();
+          X.globalAlpha = 0.8;
+          X.fillStyle = h.c;
+          X.fillRect(cx + 6, ly - 15, 3, 40);
+          X.restore();
+        });
+
+        // phase badge on code panel
+        if (step >= 2 && step <= 5) {
+          const phaseA = step === 2 ? eOut(anim) : 1;
+          phaseBadge(
+            cx + cw - 180,
+            cy + ch - 30,
+            "CREATION PHASE",
+            P.purpleD,
+            phaseA,
+          );
+        }
+        if (step >= 6 && step <= 18) {
+          const phaseA = step === 6 ? eOut(anim) : 1;
+          phaseBadge(
+            cx + cw - 190,
+            cy + ch - 30,
+            "EXECUTION PHASE",
+            P.greenD,
+            phaseA,
+          );
+        }
+
+        // execution pointer
+        const execLines = {
+          7: 0,
+          8: 1,
+          9: 8,
+          10: 8,
+          11: 4,
+          14: 4,
+          15: 5,
+          16: 6,
+          17: 8,
+          18: 9,
+        };
+        if (execLines[step] !== undefined) {
+          const el = execLines[step];
+          const py = cy + 70 + el * 38;
+          X.save();
+          X.globalAlpha = 0.9;
+          X.fillStyle = P.green;
+          X.font = '19px "Inter"';
+          X.textAlign = "right";
+          X.fillText("▶", cx + 44, py + 8);
+          X.restore();
+        }
+
+        X.restore();
+      }
+
+      /* ═══ MEMORY PANEL ═══ */
+      function drawMemory(a) {
+        const mx = 580,
+          my = 90,
+          mw = 440,
+          mh = 580;
+        X.save();
+        X.globalAlpha = a;
+        panel(mx, my, mw, mh, "ENVIRONMENTS / MEMORY", P.greenL, "");
+
+        const entries = [];
+        // Build memory state based on step
+        if (step >= 3) {
+          entries.push({
+            k: "name",
+            v: step >= 7 ? '"Alice"' : "<uninitialized>",
+            t: step >= 7 ? "string" : "tdz",
+            hl: step === 3 || step === 7,
+          });
+        }
+        if (step >= 3) {
+          entries.push({
+            k: "age",
+            v: step >= 8 ? "25" : "<uninitialized>",
+            t: step >= 8 ? "number" : "tdz",
+            hl: step === 3 || step === 8,
+          });
+        }
+        if (step >= 4) {
+          entries.push({
+            k: "greet",
+            v: "ƒ greet(prefix)",
+            t: "function",
+            hl: step === 4,
+            isFunc: true,
+          });
+        }
+        if (step >= 10) {
+          entries.push({
+            k: "prefix",
+            v: '"Hello, "',
+            t: "string",
+            scope: "greet",
+            hl: step === 10,
+          });
+        }
+        if (step >= 10) {
+          entries.push({
+            k: "greeting",
+            v: step >= 14 ? '"Hello, Alice"' : "<uninitialized>",
+            t: step >= 14 ? "string" : "tdz",
+            scope: "greet",
+            hl: step === 10 || step === 14,
+          });
+        }
+        if (step >= 3) {
+          entries.push({
+            k: "result",
+            v: step >= 17 ? '"Hello, Alice"' : "<uninitialized>",
+            t: step >= 17 ? "string" : "tdz",
+            hl: step === 3 || step === 17,
+          });
+        }
+
+        const startY = my + 60;
+        entries.forEach((e, i) => {
+          const ey = startY + i * 76;
+          const ea = e.hl ? eBack(clamp(anim)) : 1;
+          X.save();
+          X.globalAlpha = a * ea;
+
+          if (e.hl)
+            glowBox(
+              mx + 14,
+              ey,
+              mw - 28,
+              64,
+              e.isFunc ? P.blue : P.green,
+              0.6 + 0.3 * pulse(),
+            );
+
+          // row bg
+          const rowBg = e.isFunc ? P.blueBg : e.scope ? P.orangeBg : P.greenBg;
+          fillRR(mx + 14, ey, mw - 28, 64, 10, rowBg);
+          strokeRR(
+            mx + 14,
+            ey,
+            mw - 28,
+            56,
+            10,
+            e.hl ? (e.isFunc ? P.blue : P.green) : P.border,
+            e.hl ? 1.5 : 1,
+          );
+
+          // scope tag
+          if (e.scope) {
+            badge(mx + mw - 110, ey + 10, "greet()", P.orangeBg, P.orangeL, a);
+          }
+
+          // key
+          X.font = '700 19px "SF Mono",Consolas,monospace';
+          X.textAlign = "left";
+          X.fillStyle = e.isFunc ? P.blueL : P.greenL;
+          X.fillText(e.k, mx + 28, ey + 27);
+
+          // value
+          X.font = '500 18px "SF Mono",Consolas,monospace';
+          if (e.v === "undefined" || e.v === "<uninitialized>") {
+            X.fillStyle = P.tx4;
+          } else if (e.isFunc) {
+            X.fillStyle = P.blueL;
+          } else if (e.t === "string") {
+            X.fillStyle = "#22d3ee";
+          } else if (e.t === "number") {
+            X.fillStyle = P.amberL;
+          } else {
+            X.fillStyle = P.tx2;
+          }
+          X.fillText(e.v, mx + 28, ey + 51);
+
+          // type badge
+          X.font = '600 14px "Inter",sans-serif';
+          const typeCol =
+            e.t === "function"
+              ? P.blue
+              : e.t === "string"
+                ? P.cyan
+                : e.t === "number"
+                  ? P.amber
+                  : e.t === "tdz"
+                    ? P.red
+                    : P.tx4;
+          const typeTxt = e.t.toUpperCase();
+          const tw = X.measureText(typeTxt).width + 12;
+          fillRR(mx + mw - 36 - tw, ey + 38, tw, 22, 4, typeCol + "20");
+          X.fillStyle = typeCol;
+          X.fillText(typeTxt, mx + mw - 30 - tw, ey + 54);
+
+          X.restore();
+        });
+
+        // creation-phase explanation
+        if (step === 3) {
+          const ea2 = eOut(anim);
+          X.save();
+          X.globalAlpha = ea2;
+          fillRR(
+            mx + 14,
+            startY + entries.length * 68 + 10,
+            mw - 28,
+            48,
+            8,
+            P.purpleBg,
+          );
+          strokeRR(
+            mx + 14,
+            startY + entries.length * 68 + 10,
+            mw - 28,
+            48,
+            8,
+            P.purple + "30",
+            1,
+          );
+          X.font = '500 16px "Inter",sans-serif';
+          X.fillStyle = P.purpleL;
+          X.textAlign = "center";
+          X.fillText(
+            "let/const bindings are created but stay uninitialized",
+            mx + mw / 2,
+            startY + entries.length * 68 + 28,
+          );
+          X.fillText(
+            "function declarations are stored with their full body",
+            mx + mw / 2,
+            startY + entries.length * 68 + 46,
+          );
+          X.restore();
+        }
+
+        X.restore();
+      }
+
+      /* ═══ CALL STACK PANEL ═══ */
+      function drawCallStack(a) {
+        const sx = 1040,
+          sy = 90,
+          sw = 430,
+          sh = 455;
+        X.save();
+        X.globalAlpha = a;
+        panel(sx, sy, sw, sh, "CALL STACK", P.orangeL, "");
+
+        const stack = [];
+        stack.push({
+          name: "Global Execution Context",
+          col: P.blue,
+          phase:
+            step >= 2 && step <= 5
+              ? "creation"
+              : step >= 6
+                ? "execution"
+                : "idle",
+          active: step < 9 || step >= 16,
+        });
+        if (step >= 9 && step <= 16) {
+          stack.push({
+            name: "greet() Execution Context",
+            col: P.orange,
+            phase: step === 10 ? "creation" : "execution",
+            active: true,
+          });
+        }
+
+        const stackBase = sy + sh - 30;
+        stack.forEach((ctx, i) => {
+          const ch2 = step >= 9 && step <= 16 ? 165 : 190;
+          const cy2 = stackBase - ch2 * (i + 1);
+          const isTop = i === stack.length - 1;
+          const ea3 = i === 1 && step === 9 ? eBack(clamp(anim)) : 1;
+
+          // pop animation
+          let popOff = 0;
+          if (i === 1 && step === 16) {
+            popOff = eOut(anim) * 200;
+            X.globalAlpha = a * (1 - eOut(anim));
+          }
+
+          X.save();
+          X.globalAlpha *= ea3;
+          X.translate(0, -popOff);
+
+          if (isTop)
+            glowBox(
+              sx + 14,
+              cy2,
+              sw - 28,
+              ch2 - 10,
+              ctx.col,
+              0.4 + 0.2 * pulse(),
+            );
+
+          // context box
+          const grad2 = X.createLinearGradient(
+            sx + 14,
+            cy2,
+            sx + 14,
+            cy2 + ch2 - 10,
+          );
+          grad2.addColorStop(0, ctx.col + "15");
+          grad2.addColorStop(1, ctx.col + "08");
+          X.fillStyle = grad2;
+          rr(sx + 14, cy2, sw - 28, ch2 - 10, 12);
+          X.fill();
+          strokeRR(
+            sx + 14,
+            cy2,
+            sw - 28,
+            ch2 - 10,
+            12,
+            isTop ? ctx.col : ctx.col + "40",
+            isTop ? 2 : 1,
+          );
+
+          // name
+          X.font = '700 18px "Inter",sans-serif';
+          X.textAlign = "left";
+          X.fillStyle = ctx.col;
+          X.fillText(ctx.name, sx + 28, cy2 + 28);
+
+          // phase badge
+          if (ctx.phase === "creation") {
+            phaseBadge(sx + sw - 140, cy2 + 8, "CREATION", P.purpleD, 0.9);
+          }
+          if (ctx.phase === "execution") {
+            phaseBadge(sx + sw - 150, cy2 + 8, "EXECUTION", P.greenD, 0.9);
+          }
+
+          // contents
+          X.font = '400 16px "SF Mono",Consolas,monospace';
+          X.fillStyle = P.tx3;
+          if (i === 0) {
+            X.fillText("this: window (global)", sx + 32, cy2 + 58);
+            X.fillText(
+              "name: " + (step >= 7 ? '"Alice"' : "<uninitialized>"),
+              sx + 32,
+              cy2 + 82,
+            );
+            X.fillText(
+              "age: " + (step >= 8 ? "25" : "<uninitialized>"),
+              sx + 32,
+              cy2 + 106,
+            );
+            X.fillText(
+              "greet: " + (step >= 4 ? "ƒ()" : "<not registered yet>"),
+              sx + 32,
+              cy2 + 154,
+            );
+            if (step >= 3)
+              X.fillText(
+                "result: " +
+                  (step >= 17 ? '"Hello, Alice"' : "<uninitialized>"),
+                sx + 32,
+                cy2 + 154,
+              );
+          }
+          if (i === 1) {
+            X.fillText("this: window", sx + 32, cy2 + 58);
+            X.fillText('prefix: "Hello, "', sx + 32, cy2 + 82);
+            X.fillText(
+              "greeting: " +
+                (step >= 14 ? '"Hello, Alice"' : "<uninitialized>"),
+              sx + 32,
+              cy2 + 106,
+            );
+            if (step >= 12) {
+              X.fillStyle = P.cyanL;
+              X.fillText("[[Scope]]: → Global", sx + 32, cy2 + 154);
+            }
+          }
+
+          // stack position label
+          X.font = '600 14px "Inter",sans-serif';
+          X.fillStyle = ctx.col + "80";
+          X.textAlign = "right";
+          X.fillText(isTop ? "← TOP" : "", sx + sw - 24, cy2 + ch2 - 20);
+
+          X.restore();
+        });
+
+        // Stack pointer
+        if (stack.length > 0) {
+          const topI = stack.length - 1;
+          const ch2 = step >= 9 && step <= 16 ? 165 : 190;
+          const topY = stackBase - ch2 * (topI + 1);
+          X.save();
+          X.globalAlpha = a * (0.6 + 0.4 * pulse());
+          X.fillStyle = stack[topI].col;
+          X.font = '22px "Inter"';
+          X.textAlign = "left";
+          X.fillText("▶", sx + 2, topY + 24);
+          X.restore();
+        }
+
+        X.restore();
+      }
+
+      /* ═══ CONSOLE OUTPUT PANEL ═══ */
+      function drawConsole(a) {
+        const cx2 = 1040,
+          cy2 = 570,
+          cw2 = 430,
+          ch2 = 160;
+        X.save();
+        X.globalAlpha = a;
+        panel(cx2, cy2, cw2, ch2, "CONSOLE OUTPUT", P.cyanL, "");
+
+        X.font = '500 19px "SF Mono","Fira Code",Consolas,monospace';
+        X.textAlign = "left";
+
+        if (step >= 18) {
+          const la2 = step === 18 ? eBack(anim) : 1;
+          X.save();
+          X.globalAlpha = a * la2;
+          X.fillStyle = P.cyanL;
+          X.fillText("> ", cx2 + 20, cy2 + 82);
+          X.fillStyle = "#22d3ee";
+          X.fillText('"Hello, Alice"', cx2 + 40, cy2 + 82);
+          X.restore();
+        }
+
+        if (step < 18) {
+          X.fillStyle = P.tx4;
+          X.font = 'italic 18px "Inter",sans-serif';
+          X.textAlign = "center";
+          X.fillText("Waiting for output...", cx2 + cw2 / 2, cy2 + 106);
+          // blinking cursor
+          X.save();
+          X.globalAlpha = 0.3 + 0.7 * pulse();
+          X.fillStyle = P.cyanL;
+          X.fillRect(cx2 + 20, cy2 + 62, 8, 18);
+          X.restore();
+        }
+
+        X.restore();
+      }
+
+      /* ═══ SCOPE CHAIN VISUALIZATION ═══ */
+      function drawScopeChain(a) {
+        if (step < 12 || step > 13) return;
+        const sx2 = 580,
+          sy2 = 700,
+          sw2 = 870,
+          sh2 = 290;
+        X.save();
+        X.globalAlpha = a;
+        panel(sx2, sy2, sw2, sh2, "SCOPE CHAIN LOOKUP", P.cyanL, "");
+
+        // greet scope box
+        const g1x = sx2 + 40,
+          g1y = sy2 + 60,
+          g1w = 200,
+          g1h = 100;
+        fillRR(g1x, g1y, g1w, g1h, 10, P.orangeBg);
+        strokeRR(g1x, g1y, g1w, g1h, 10, P.orange, 1.5);
+        X.font = '700 18px "Inter",sans-serif';
+        X.fillStyle = P.orangeL;
+        X.textAlign = "center";
+        X.fillText("greet() Scope", g1x + g1w / 2, g1y + 24);
+        X.font = '400 16px "SF Mono",Consolas,monospace';
+        X.fillStyle = P.tx3;
+        X.fillText('prefix: "Hello, "', g1x + g1w / 2, g1y + 50);
+        X.fillText("greeting: <uninitialized>", g1x + g1w / 2, g1y + 70);
+
+        // "name" not found badge
+        if (step >= 12) {
+          const nfa = eOut(anim);
+          X.save();
+          X.globalAlpha = nfa;
+          fillRR(g1x + 20, g1y + g1h + 8, g1w - 40, 22, 4, P.redBg);
+          X.font = '600 15px "Inter",sans-serif';
+          X.fillStyle = P.redL;
+          X.textAlign = "center";
+          X.fillText('"name" not found', g1x + g1w / 2, g1y + g1h + 23);
+          X.restore();
+        }
+
+        // Arrow to global
+        const arrowStartX = g1x + g1w,
+          arrowStartY = g1y + g1h / 2;
+        const g2x = sx2 + 380,
+          g2y = sy2 + 60,
+          g2w = 220,
+          g2h = 100;
+
+        if (step >= 12) {
+          const aa = eOut(clamp(anim * 1.5 - 0.3));
+          dashedArrow(
+            arrowStartX + 5,
+            arrowStartY,
+            g2x - 5,
+            arrowStartY,
+            P.cyan,
+            aa,
+            2.5,
+          );
+          X.save();
+          X.globalAlpha = aa;
+          X.font = '600 16px "Inter",sans-serif';
+          X.fillStyle = P.cyanL;
+          X.textAlign = "center";
+          X.fillText(
+            "Scope Chain",
+            arrowStartX + (g2x - arrowStartX) / 2,
+            arrowStartY - 14,
+          );
+          X.restore();
+        }
+
+        // Global scope box
+        fillRR(g2x, g2y, g2w, g2h, 10, P.blueBg);
+        strokeRR(g2x, g2y, g2w, g2h, 10, P.blue, 1.5);
+        X.font = '700 18px "Inter",sans-serif';
+        X.fillStyle = P.blueL;
+        X.textAlign = "center";
+        X.fillText("Global Scope", g2x + g2w / 2, g2y + 24);
+        X.font = '400 16px "SF Mono",Consolas,monospace';
+        X.fillStyle = P.tx3;
+        X.fillText('name: "Alice"', g2x + g2w / 2, g2y + 50);
+        X.fillText("age: 25", g2x + g2w / 2, g2y + 70);
+        X.fillText("greet: ƒ()", g2x + g2w / 2, g2y + 90);
+
+        // found badge
+        if (step >= 13) {
+          const fa = eBack(clamp(anim));
+          X.save();
+          X.globalAlpha = fa;
+          glowBox(g2x + 30, g2y + 38, g2w - 60, 20, P.green, 0.8);
+          fillRR(g2x + 30, g2y + 38, g2w - 60, 20, 4, P.greenBg);
+          strokeRR(g2x + 30, g2y + 38, g2w - 60, 20, 4, P.green, 1.5);
+          X.restore();
+
+          // result arrow back
+          const ra = eOut(clamp(anim * 1.5 - 0.4));
+          X.save();
+          X.globalAlpha = ra;
+          dashedArrow(
+            g2x + g2w + 5,
+            arrowStartY + 30,
+            g2x + g2w + 180,
+            arrowStartY + 30,
+            P.green,
+            ra,
+            2,
+          );
+          fillRR(g2x + g2w + 185, arrowStartY + 10, 180, 40, 8, P.greenBg);
+          strokeRR(
+            g2x + g2w + 185,
+            arrowStartY + 10,
+            180,
+            40,
+            8,
+            P.green + "40",
+            1,
+          );
+          X.font = '700 19px "SF Mono",Consolas,monospace';
+          X.fillStyle = P.greenL;
+          X.textAlign = "left";
+          X.fillText('→ "Alice"', g2x + g2w + 195, arrowStartY + 36);
+          X.restore();
+        }
+
+        // Explanation
+        X.font = '400 18px "Inter",sans-serif';
+        X.fillStyle = P.tx3;
+        X.textAlign = "center";
+        X.fillText(
+          "JavaScript follows the scope chain upward: Local → Enclosing → Global",
+          sx2 + sw2 / 2,
+          sy2 + sh2 - 20,
+        );
+
+        X.restore();
+      }
+
+      /* ═══ TITLE SCREEN ═══ */
+      function drawTitle(a) {
+        X.save();
+        X.globalAlpha = a;
+
+        // Main title
+        const grad = X.createLinearGradient(
+          W / 2 - 300,
+          H / 2 - 60,
+          W / 2 + 300,
+          H / 2 - 60,
+        );
+        grad.addColorStop(0, P.blue);
+        grad.addColorStop(0.5, P.purple);
+        grad.addColorStop(1, P.cyan);
+        X.font = '800 60px "Inter","Segoe UI",sans-serif';
+        X.textAlign = "center";
+        X.fillStyle = grad;
+        X.fillText("How JavaScript Executes Code", W / 2, H / 2 - 40);
+
+        X.font = '400 26px "Inter","Segoe UI",sans-serif';
+        X.fillStyle = P.tx3;
+        X.fillText(
+          "Inside the JavaScript Engine — Step by Step",
+          W / 2,
+          H / 2 + 10,
+        );
+
+        // Feature pills
+        const features = [
+          "Source Code",
+          "Environments",
+          "Call Stack",
+          "Console",
+        ];
+        const pillW = 170;
+        const pillGap = 20;
+        const totalPW =
+          features.length * pillW + (features.length - 1) * pillGap;
+        const pillStartX = W / 2 - totalPW / 2;
+
+        features.forEach((f, i) => {
+          const px = pillStartX + i * (pillW + pillGap);
+          const py = H / 2 + 60;
+          const da = eOut(clamp((a - 0.15 * i) * 3));
+          X.save();
+          X.globalAlpha = da;
+          const cols = [P.blue, P.green, P.orange, P.cyan];
+          fillRR(px, py, pillW, 44, 10, cols[i] + "18");
+          strokeRR(px, py, pillW, 44, 10, cols[i] + "40", 1);
+          X.font = '600 19px "Inter",sans-serif';
+          X.fillStyle = cols[i];
+          X.textAlign = "center";
+          X.fillText(f, px + pillW / 2, py + 28);
+          X.restore();
+        });
+
+        // press next
+        X.save();
+        X.globalAlpha = 0.4 + 0.4 * pulse();
+        X.font = '400 22px "Inter",sans-serif';
+        X.fillStyle = P.tx4;
+        X.textAlign = "center";
+        X.fillText("Press Next → to begin", W / 2, H / 2 + 150);
+        X.restore();
+
+        X.restore();
+      }
+
+      /* ═══ SUMMARY SCREEN ═══ */
+      function drawSummary(a) {
+        X.save();
+        X.globalAlpha = a;
+
+        // title
+        const grad = X.createLinearGradient(W / 2 - 200, 100, W / 2 + 200, 100);
+        grad.addColorStop(0, P.blue);
+        grad.addColorStop(1, P.purple);
+        X.font = '800 46px "Inter",sans-serif';
+        X.textAlign = "center";
+        X.fillStyle = grad;
+        X.fillText("Key Concepts", W / 2, 120);
+
+        const concepts = [
+          {
+            icon: "1",
+            title: "Creation Phase",
+            desc: "var becomes undefined; let/const stay uninitialized until their line runs",
+            col: P.purple,
+          },
+          {
+            icon: "2",
+            title: "Execution Phase",
+            desc: "Code runs line by line, values assigned",
+            col: P.green,
+          },
+          {
+            icon: "3",
+            title: "Execution Context",
+            desc: "Each function call creates a new context on the stack",
+            col: P.orange,
+          },
+          {
+            icon: "4",
+            title: "Scope Chain",
+            desc: "Variables resolved by walking up the lexical scope chain",
+            col: P.cyan,
+          },
+          {
+            icon: "5",
+            title: "Call Stack",
+            desc: "Contexts pushed on call, popped on return (LIFO)",
+            col: P.blue,
+          },
+          {
+            icon: "6",
+            title: "Hoisting",
+            desc: "Declarations processed before execution begins",
+            col: P.amber,
+          },
+        ];
+
+        const cols2 = 2,
+          rows2 = 3;
+        concepts.forEach((c, i) => {
+          const col = i % cols2,
+            row = Math.floor(i / cols2);
+          const bx = W / 2 - 580 + col * 600;
+          const by = 170 + row * 170;
+          const da = eOut(clamp((a - 0.08 * i) * 3));
+          X.save();
+          X.globalAlpha = da;
+
+          fillRR(bx, by, 560, 140, 14, c.col + "0a");
+          strokeRR(bx, by, 560, 140, 14, c.col + "25", 1.5);
+
+          // accent bar
+          X.fillStyle = c.col;
+          X.fillRect(bx, by + 14, 4, 112);
+
+          X.font = '38px "Inter"';
+          X.textAlign = "left";
+          X.fillText(c.icon, bx + 24, by + 50);
+
+          X.font = '700 27px "Inter",sans-serif';
+          X.fillStyle = c.col;
+          X.fillText(c.title, bx + 70, by + 46);
+
+          X.font = '400 20px "Inter",sans-serif';
+          X.fillStyle = P.tx3;
+          X.fillText(c.desc, bx + 70, by + 76);
+
+          // mini visual
+          if (i === 0) {
+            X.font = '500 16px "SF Mono",Consolas,monospace';
+            X.fillStyle = P.purpleL;
+            X.fillText(
+              "let x → <uninitialized>  |  var y → undefined",
+              bx + 70,
+              by + 110,
+            );
+          }
+          if (i === 2) {
+            X.font = '500 16px "SF Mono",Consolas,monospace';
+            X.fillStyle = P.orangeL;
+            X.fillText(
+              "call → push context  |  return → pop context",
+              bx + 70,
+              by + 110,
+            );
+          }
+          if (i === 3) {
+            X.font = '500 16px "SF Mono",Consolas,monospace';
+            X.fillStyle = P.cyanL;
+            X.fillText(
+              "Local → Enclosing → Global → ✗ ReferenceError",
+              bx + 70,
+              by + 110,
+            );
+          }
+
+          X.restore();
+        });
+
+        // bottom tip
+        X.save();
+        X.globalAlpha = a;
+        fillRR(W / 2 - 340, H - 150, 680, 50, 12, P.blueBg);
+        strokeRR(W / 2 - 340, H - 150, 680, 50, 12, P.blue + "30", 1);
+        X.font = '500 20px "Inter",sans-serif';
+        X.fillStyle = P.blueL;
+        X.textAlign = "center";
+        X.fillText(
+          '"Declarations are registered first; values are assigned as execution reaches each line."',
+          W / 2,
+          H - 120,
+        );
+        X.restore();
+
+        X.restore();
+      }
+
+      /* ═══ NARRATION BOX ═══ */
+      function drawNarration(a) {
+        if (step === 0 || step === 19) return;
+        const narrations = {
+          1: "The JavaScript engine receives this source code. Before executing anything, it will first scan the entire script.",
+          2: "The engine enters the Creation Phase. It scans for declarations without executing any code.",
+          3: "Declarations are registered. var would be initialized as undefined, but let and const are created as uninitialized bindings in the lexical environment.",
+          4: "Function declarations are fully stored in memory — the entire function body is available immediately.",
+          5: "Global creation is complete. The engine knows the declared names, but let variables cannot be used until their declaration line executes.",
+          6: "Execution Phase begins. The engine now runs code line by line, top to bottom.",
+          7: 'Line 1 executes: the let binding name is initialized with the string value "Alice".',
+          8: "Line 2 executes: the let binding age is initialized with the number 25.",
+          9: 'Line 9: greet("Hello, ") is called. A NEW execution context is created and pushed onto the stack.',
+          10: 'greet() gets its own execution context. The parameter prefix is initialized with "Hello, ", while the let binding greeting is created but still uninitialized.',
+          11: "greet() executes line 5: greeting = prefix + name. But \"name\" isn't in greet's local scope!",
+          12: 'The engine follows the Scope Chain: greet() → Global. It looks for "name" in the next outer scope.',
+          13: 'Found! name = "Alice" in Global scope. The scope chain resolves the variable successfully.',
+          14: 'greeting = "Hello, " + "Alice" → "Hello, Alice". The concatenation is complete.',
+          15: 'return greeting sends "Hello, Alice" back to the paused global line. Nothing is printed yet because this function has no console.log inside it.',
+          16: "greet() finishes. Its execution context is popped off the stack. Its local environment is no longer needed.",
+          17: 'Back in Global: result = "Hello, Alice" (the return value from greet).',
+          18: 'console.log(result) outputs "Hello, Alice" to the console.',
+        };
+
+        const txt = narrations[step];
+        if (!txt) return;
+
+        const nx = 40,
+          ny = H - 120,
+          nw = 680,
+          nh = 100;
+        X.save();
+        X.globalAlpha = a;
+        fillRR(nx, ny, nw, nh, 12, P.bg2);
+        strokeRR(nx, ny, nw, nh, 12, P.border, 1);
+
+        // icon
+        X.font = '24px "Inter"';
+        X.textAlign = "left";
+        X.fillText("Note", nx + 14, ny + 30);
+
+        // text wrapping
+        X.font = '400 18px "Inter",sans-serif';
+        X.fillStyle = P.tx2;
+        const words = txt.split(" ");
+        let line = "",
+          lineY = ny + 28,
+          maxW = nw - 80;
+        words.forEach((w) => {
+          const test = line + w + " ";
+          if (X.measureText(test).width > maxW && line) {
+            X.fillText(line.trim(), nx + 44, lineY);
+            line = w + " ";
+            lineY += 24;
+          } else {
+            line = test;
+          }
+        });
+        if (line) X.fillText(line.trim(), nx + 44, lineY);
+
+        X.restore();
+      }
+
+      /* ═══ HEADER ═══ */
+      function drawHeader() {
+        if (step === 0 || step === 19) return;
+        X.save();
+        // subtle gradient line at top
+        const hg = X.createLinearGradient(0, 0, W, 0);
+        hg.addColorStop(0, P.blue);
+        hg.addColorStop(0.33, P.purple);
+        hg.addColorStop(0.66, P.green);
+        hg.addColorStop(1, P.cyan);
+        X.fillStyle = hg;
+        X.fillRect(0, 0, W, 3);
+
+        // title
+        X.font = '700 24px "Inter",sans-serif';
+        X.fillStyle = P.tx;
+        X.textAlign = "left";
+        X.fillText("JavaScript Engine Internals", 20, 32);
+
+        // step badge
+        X.font = '600 16px "Inter",sans-serif';
+        const phase =
+          step < 2
+            ? "OVERVIEW"
+            : step >= 2 && step <= 5
+              ? "CREATION"
+              : "EXECUTION";
+        const phCol =
+          step < 2 ? P.blue : step >= 2 && step <= 5 ? P.purple : P.green;
+        badge(W - 220, 28, `PHASE: ${phase}`, phCol + "25", phCol, 1);
+
+        // progress bar
+        const prog = step / (STEPS.length - 1);
+        X.fillStyle = P.bg3;
+        rr(W / 2 - 200, 20, 400, 6, 3);
+        X.fill();
+        const pg = X.createLinearGradient(W / 2 - 200, 0, W / 2 + 200, 0);
+        pg.addColorStop(0, P.blue);
+        pg.addColorStop(1, P.purple);
+        X.fillStyle = pg;
+        rr(W / 2 - 200, 20, 400 * prog, 6, 3);
+        X.fill();
+
+        X.restore();
+      }
+
+      /* ═══ CONNECTION ARROWS between panels ═══ */
+      function drawConnections(a) {
+        if (step < 7) return;
+        X.save();
+        X.globalAlpha = a * 0.3;
+
+        // Code → Memory
+        if (step >= 7 && step <= 8) {
+          const ca = eOut(anim);
+          dashedArrow(560, 280, 580, 280, P.green, ca * 0.5, 1.5);
+        }
+
+        // Code → Call Stack (on function call)
+        if (step === 9) {
+          const ca2 = eOut(anim);
+          dashedArrow(560, 400, 1040, 300, P.orange, ca2 * 0.5, 1.5);
+        }
+
+        X.restore();
+      }
+
+      /* ═══ MAIN RENDER ═══ */
+      function render() {
+        X.clearRect(0, 0, W, H);
+        X.fillStyle = P.bg;
+        X.fillRect(0, 0, W, H);
+
+        // subtle grid
+        X.save();
+        X.globalAlpha = 0.03;
+        X.strokeStyle = "#fff";
+        X.lineWidth = 1;
+        for (let gx = 0; gx < W; gx += 60) {
+          X.beginPath();
+          X.moveTo(gx, 0);
+          X.lineTo(gx, H);
+          X.stroke();
+        }
+        for (let gy = 0; gy < H; gy += 60) {
+          X.beginPath();
+          X.moveTo(0, gy);
+          X.lineTo(W, gy);
+          X.stroke();
+        }
+        X.restore();
+
+        const a = clamp(anim);
+
+        if (step === 0) {
+          drawTitle(eOut(a));
+          return;
+        }
+        if (step === 19) {
+          drawHeader();
+          drawSummary(eOut(a));
+          return;
+        }
+
+        drawHeader();
+
+        // panels
+        if (step >= 1) {
+          const pa = step === 1 ? eOut(a) : 1;
+          drawCode(pa);
+        }
+        if (step >= 2) {
+          const ma = step === 2 ? eOut(a) : 1;
+          drawMemory(ma);
+        }
+        if (step >= 2) {
+          const sa = step === 2 ? eOut(a) : 1;
+          drawCallStack(sa);
+        }
+        if (step >= 2) {
+          const ca = step === 2 ? eOut(a) : 1;
+          drawConsole(ca);
+        }
+
+        drawScopeChain(step === 12 ? eOut(a) : step === 13 ? 1 : 0);
+        drawConnections(eOut(a));
+        drawNarration(step >= 1 ? 1 : 0);
+      }
+
+      let lastT = 0;
+      function loop(ts) {
+        const dt = (ts - lastT) / 1000;
+        lastT = ts;
+        anim = clamp(anim + dt * (1000 / AD));
+        render();
+        requestAnimationFrame(loop);
+      }
+      requestAnimationFrame(loop);
+    </script>
+  </body>
+</html>
