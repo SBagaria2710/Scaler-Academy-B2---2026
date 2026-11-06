@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Callback Handoff Visualizer</title>
+
+    <style>
+      :root {
+        --bg: #eef3f9;
+        --surface: #ffffff;
+        --text: #172033;
+        --muted: #667085;
+        --border: #d8e1ee;
+        --blue: #315efb;
+        --blue-soft: #edf2ff;
+        --purple: #7c3aed;
+        --purple-soft: #f3edff;
+        --green: #16875b;
+        --green-soft: #eaf8f2;
+        --amber: #b26a00;
+        --amber-soft: #fff5df;
+        --code: #111827;
+        --code-text: #e8eef7;
+        --shadow: 0 18px 42px rgba(40, 64, 112, 0.12);
+        --radius: 18px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, #ffffff 0, transparent 28%),
+          linear-gradient(135deg, #eef3f9, #f8fbff);
+      }
+
+      button {
+        font: inherit;
+      }
+
+      .page {
+        width: min(980px, calc(100% - 24px));
+        margin: 24px auto;
+      }
+
+      .intro {
+        margin-bottom: 16px;
+      }
+
+      .intro h1 {
+        margin: 0 0 6px;
+        font-size: clamp(28px, 5vw, 42px);
+        letter-spacing: -0.04em;
+      }
+
+      .intro p {
+        margin: 0;
+        max-width: 780px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .card {
+        overflow: hidden;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        box-shadow: var(--shadow);
+      }
+
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
+        background: #fbfcfe;
+      }
+
+      .header strong {
+        font-size: 15px;
+      }
+
+      .step-label {
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 750;
+      }
+
+      .content {
+        display: grid;
+        gap: 18px;
+        padding: 20px;
+      }
+
+      .code-panel {
+        padding: 18px;
+        overflow: auto;
+        border-radius: var(--radius);
+        background: var(--code);
+        color: var(--code-text);
+      }
+
+      .code-line {
+        display: block;
+        min-height: 1.65em;
+        padding: 2px 10px;
+        border-left: 3px solid transparent;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 15px;
+        line-height: 1.65;
+        white-space: pre;
+      }
+
+      .token {
+        border-radius: 5px;
+        padding: 1px 4px;
+        transition: 160ms ease;
+      }
+
+      .token.active-blue {
+        color: #ffffff;
+        background: var(--blue);
+        box-shadow: 0 0 0 3px rgba(49, 94, 251, 0.18);
+      }
+
+      .token.active-purple {
+        color: #ffffff;
+        background: var(--purple);
+        box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.18);
+      }
+
+      .token.active-green {
+        color: #ffffff;
+        background: var(--green);
+        box-shadow: 0 0 0 3px rgba(22, 135, 91, 0.18);
+      }
+
+      .focus {
+        min-height: 210px;
+        display: grid;
+        place-items: center;
+        padding: 26px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: #fbfcfe;
+        text-align: center;
+      }
+
+      .focus-inner {
+        width: min(100%, 720px);
+      }
+
+      .focus-kicker {
+        margin-bottom: 12px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .focus-main {
+        font-size: clamp(24px, 4vw, 38px);
+        font-weight: 850;
+        line-height: 1.25;
+        letter-spacing: -0.03em;
+      }
+
+      .function-chip,
+      .value-chip,
+      .param-chip {
+        display: inline-block;
+        margin: 4px;
+        padding: 8px 13px;
+        border-radius: 12px;
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 0.72em;
+        vertical-align: middle;
+      }
+
+      .function-chip {
+        color: var(--purple);
+        background: var(--purple-soft);
+        border: 1px solid #d5c2ff;
+      }
+
+      .param-chip {
+        color: var(--blue);
+        background: var(--blue-soft);
+        border: 1px solid #c9d7ff;
+      }
+
+      .value-chip {
+        color: var(--green);
+        background: var(--green-soft);
+        border: 1px solid #bde7d5;
+      }
+
+      .flow-arrow {
+        display: inline-block;
+        margin: 0 8px;
+        color: var(--muted);
+      }
+
+      .focus-note {
+        margin: 18px auto 0;
+        max-width: 680px;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.6;
+      }
+
+      .focus-note strong {
+        color: var(--text);
+      }
+
+      .explanation {
+        min-height: 92px;
+        padding: 16px 18px;
+        border-radius: var(--radius);
+        border: 1px solid #c9d7ff;
+        background: var(--blue-soft);
+        line-height: 1.55;
+      }
+
+      .explanation strong {
+        color: var(--blue);
+      }
+
+      .controls {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .btn {
+        padding: 10px 16px;
+        border-radius: 11px;
+        border: 1px solid transparent;
+        cursor: pointer;
+        font-weight: 800;
+      }
+
+      .btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .btn-secondary {
+        background: white;
+        color: var(--text);
+        border-color: var(--border);
+      }
+
+      .btn-primary {
+        color: white;
+        background: var(--blue);
+        box-shadow: 0 8px 18px rgba(49, 94, 251, 0.2);
+      }
+
+      .footer {
+        padding: 14px 20px;
+        border-top: 1px solid var(--border);
+        background: #fbfcfe;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .footer strong {
+        color: var(--text);
+      }
+
+      @media (max-width: 680px) {
+        .page {
+          width: min(100% - 14px, 980px);
+          margin: 10px auto;
+        }
+
+        .content {
+          padding: 12px;
+        }
+
+        .focus {
+          padding: 18px 12px;
+        }
+
+        .controls {
+          justify-content: stretch;
+        }
+
+        .btn {
+          flex: 1;
+        }
+
+        .code-line {
+          font-size: 13px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <main class="page">
+      <header class="intro">
+        <h1>Callback Handoff</h1>
+        <p>
+          Follow one function value through the program: passed, received,
+          called, executed, and returned.
+        </p>
+      </header>
+
+      <section class="card">
+        <div class="header">
+          <strong>Example: compute(add, 5, 3)</strong>
+          <span class="step-label" id="stepLabel">Step 0 of 5</span>
+        </div>
+
+        <div class="content">
+          <div class="code-panel" id="codePanel"></div>
+
+          <section class="focus" aria-live="polite">
+            <div class="focus-inner">
+              <div class="focus-kicker" id="focusKicker"></div>
+              <div class="focus-main" id="focusMain"></div>
+              <div class="focus-note" id="focusNote"></div>
+            </div>
+          </section>
+
+          <div class="explanation" id="explanation"></div>
+
+          <div class="controls">
+            <button class="btn btn-secondary" id="previousButton">
+              Previous
+            </button>
+            <button class="btn btn-secondary" id="resetButton">Reset</button>
+            <button class="btn btn-primary" id="nextButton">Next step</button>
+          </div>
+        </div>
+
+        <div class="footer">
+          <strong>Remember:</strong>
+          <code>add</code> means the function value. <code>add()</code> means
+          call the function now.
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const steps = [
+        {
+          label: "Step 0 of 5",
+          highlights: [],
+          kicker: "Before execution",
+          main: `
+          <span class="function-chip">add</span>
+          is a function value
+        `,
+          note: `
+          The function exists, but it has not been called yet.
+        `,
+          explanation: `
+          <strong>Observe the call:</strong>
+          <code>compute(add, 5, 3)</code> contains the function name
+          <code>add</code> without parentheses.
+        `,
+        },
+        {
+          label: "Step 1 of 5",
+          highlights: [{ id: "callAdd", className: "active-purple" }],
+          kicker: "Pass the callback",
+          main: `
+          <span class="function-chip">add</span>
+          <span class="flow-arrow">→</span>
+          <span class="param-chip">compute(...)</span>
+        `,
+          note: `
+          JavaScript passes the <strong>function itself</strong> into
+          <code>compute</code>. It does not execute <code>add</code>.
+        `,
+          explanation: `
+          <strong>What moves?</strong>
+          The value being passed is the function <code>add</code>.
+          This passed function is the callback.
+        `,
+        },
+        {
+          label: "Step 2 of 5",
+          highlights: [
+            { id: "paramOperation", className: "active-blue" },
+            { id: "callAdd", className: "active-purple" },
+          ],
+          kicker: "Receive the callback",
+          main: `
+          <span class="param-chip">operation</span>
+          <span class="flow-arrow">=</span>
+          <span class="function-chip">add</span>
+        `,
+          note: `
+          Inside <code>compute</code>, the parameter
+          <code>operation</code> now refers to the same function as
+          <code>add</code>.
+        `,
+          explanation: `
+          <strong>No copy and no new function:</strong>
+          <code>operation</code> is simply another reference to
+          <code>add</code>.
+        `,
+        },
+        {
+          label: "Step 3 of 5",
+          highlights: [
+            { id: "invokeOperation", className: "active-blue" },
+            { id: "invokeX", className: "active-blue" },
+            { id: "invokeY", className: "active-blue" },
+          ],
+          kicker: "Call the callback",
+          main: `
+          <span class="param-chip">operation(5, 3)</span>
+          <span class="flow-arrow">becomes</span>
+          <span class="function-chip">add(5, 3)</span>
+        `,
+          note: `
+          <code>compute</code> decides when to call the callback.
+          This is the moment the callback actually runs.
+        `,
+          explanation: `
+          <strong>This is the callback invocation:</strong>
+          <code>operation(x, y)</code> resolves to
+          <code>add(5, 3)</code>.
+        `,
+        },
+        {
+          label: "Step 4 of 5",
+          highlights: [
+            { id: "callbackA", className: "active-purple" },
+            { id: "callbackB", className: "active-purple" },
+            { id: "callbackReturn", className: "active-green" },
+          ],
+          kicker: "Execute the callback",
+          main: `
+          <span class="function-chip">a = 5</span>
+          <span class="function-chip">b = 3</span>
+          <span class="flow-arrow">→</span>
+          <span class="value-chip">8</span>
+        `,
+          note: `
+          The callback performs its own logic:
+          <code>5 + 3</code>, then returns <code>8</code>.
+        `,
+          explanation: `
+          <strong>The callback has one job:</strong>
+          receive values, run its logic, and return a result.
+        `,
+        },
+        {
+          label: "Step 5 of 5",
+          highlights: [
+            { id: "invokeOperation", className: "active-green" },
+            { id: "resultCall", className: "active-green" },
+            { id: "consoleResult", className: "active-green" },
+          ],
+          kicker: "Return the result",
+          main: `
+          <span class="function-chip">add</span>
+          <span class="flow-arrow">returns</span>
+          <span class="value-chip">8</span>
+          <span class="flow-arrow">to</span>
+          <span class="param-chip">compute</span>
+        `,
+          note: `
+          <code>compute</code> returns that same value to the caller.
+          The console finally prints <code>8</code>.
+        `,
+          explanation: `
+          <strong>Complete flow:</strong>
+          function passed → received as <code>operation</code> →
+          called → returned <code>8</code>.
+        `,
+        },
+      ];
+
+      const codePanel = document.querySelector("#codePanel");
+      const stepLabel = document.querySelector("#stepLabel");
+      const focusKicker = document.querySelector("#focusKicker");
+      const focusMain = document.querySelector("#focusMain");
+      const focusNote = document.querySelector("#focusNote");
+      const explanation = document.querySelector("#explanation");
+      const previousButton = document.querySelector("#previousButton");
+      const resetButton = document.querySelector("#resetButton");
+      const nextButton = document.querySelector("#nextButton");
+
+      let currentStep = 0;
+
+      function buildCode() {
+        codePanel.innerHTML = `
+        <span class="code-line">function add(<span class="token" id="callbackA">a</span>, <span class="token" id="callbackB">b</span>) {</span>
+        <span class="code-line">  <span class="token" id="callbackReturn">return a + b;</span></span>
+        <span class="code-line">}</span>
+        <span class="code-line"> </span>
+        <span class="code-line">function compute(<span class="token" id="paramOperation">operation</span>, x, y) {</span>
+        <span class="code-line">  return <span class="token" id="invokeOperation">operation</span>(<span class="token" id="invokeX">x</span>, <span class="token" id="invokeY">y</span>);</span>
+        <span class="code-line">}</span>
+        <span class="code-line"> </span>
+        <span class="code-line">const result = <span class="token" id="resultCall">compute(<span class="token" id="callAdd">add</span>, 5, 3)</span>;</span>
+        <span class="code-line">console.log(<span class="token" id="consoleResult">result</span>);</span>
+      `;
+      }
+
+      function clearHighlights() {
+        document.querySelectorAll(".token").forEach((token) => {
+          token.classList.remove(
+            "active-blue",
+            "active-purple",
+            "active-green",
+          );
+        });
+      }
+
+      function render() {
+        const step = steps[currentStep];
+
+        clearHighlights();
+
+        for (const highlight of step.highlights) {
+          const element = document.querySelector(`#${highlight.id}`);
+          if (element) {
+            element.classList.add(highlight.className);
+          }
+        }
+
+        stepLabel.textContent = step.label;
+        focusKicker.textContent = step.kicker;
+        focusMain.innerHTML = step.main;
+        focusNote.innerHTML = step.note;
+        explanation.innerHTML = step.explanation;
+
+        previousButton.disabled = currentStep === 0;
+        nextButton.disabled = currentStep === steps.length - 1;
+      }
+
+      nextButton.addEventListener("click", () => {
+        if (currentStep < steps.length - 1) {
+          currentStep += 1;
+          render();
+        }
+      });
+
+      previousButton.addEventListener("click", () => {
+        if (currentStep > 0) {
+          currentStep -= 1;
+          render();
+        }
+      });
+
+      resetButton.addEventListener("click", () => {
+        currentStep = 0;
+        render();
+      });
+
+      buildCode();
+      render();
+    </script>
+  </body>
+</html>
