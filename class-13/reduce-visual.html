@@ -1,0 +1,756 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JavaScript Reduce Visualizer</title>
+
+    <style>
+      :root {
+        --bg: #eef3f9;
+        --surface: #ffffff;
+        --text: #172033;
+        --muted: #667085;
+        --border: #d8e1ee;
+        --blue: #315efb;
+        --blue-soft: #edf2ff;
+        --purple: #7c3aed;
+        --purple-soft: #f3edff;
+        --green: #16875b;
+        --green-soft: #eaf8f2;
+        --amber: #b26a00;
+        --amber-soft: #fff5df;
+        --code: #111827;
+        --code-text: #e8eef7;
+        --shadow: 0 18px 42px rgba(40, 64, 112, 0.12);
+        --radius: 18px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, #ffffff 0, transparent 28%),
+          linear-gradient(135deg, #eef3f9, #f8fbff);
+      }
+
+      button {
+        font: inherit;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+
+      .page {
+        width: min(1000px, calc(100% - 24px));
+        margin: 24px auto;
+      }
+
+      .intro {
+        margin-bottom: 16px;
+      }
+
+      .intro h1 {
+        margin: 0 0 6px;
+        font-size: clamp(28px, 5vw, 42px);
+        letter-spacing: -0.04em;
+      }
+
+      .intro p {
+        margin: 0;
+        max-width: 800px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .card {
+        overflow: hidden;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        box-shadow: var(--shadow);
+      }
+
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
+        background: #fbfcfe;
+      }
+
+      .header strong {
+        font-size: 15px;
+      }
+
+      .step-label {
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 750;
+      }
+
+      .content {
+        display: grid;
+        gap: 18px;
+        padding: 20px;
+      }
+
+      .code-panel {
+        padding: 18px;
+        overflow: auto;
+        border-radius: var(--radius);
+        background: var(--code);
+        color: var(--code-text);
+      }
+
+      .code-line {
+        display: block;
+        min-height: 1.65em;
+        padding: 2px 10px;
+        border-left: 3px solid transparent;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 15px;
+        line-height: 1.65;
+        white-space: pre;
+      }
+
+      .token {
+        border-radius: 5px;
+        padding: 1px 4px;
+        transition: 160ms ease;
+      }
+
+      .token.active-blue {
+        color: #ffffff;
+        background: var(--blue);
+        box-shadow: 0 0 0 3px rgba(49, 94, 251, 0.18);
+      }
+
+      .token.active-purple {
+        color: #ffffff;
+        background: var(--purple);
+        box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.18);
+      }
+
+      .token.active-green {
+        color: #ffffff;
+        background: var(--green);
+        box-shadow: 0 0 0 3px rgba(22, 135, 91, 0.18);
+      }
+
+      .token.active-amber {
+        color: #ffffff;
+        background: var(--amber);
+        box-shadow: 0 0 0 3px rgba(178, 106, 0, 0.18);
+      }
+
+      .array-panel {
+        padding: 16px 18px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: #fbfcfe;
+      }
+
+      .section-label {
+        margin-bottom: 12px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .array-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .array-item {
+        min-width: 74px;
+        padding: 13px 12px;
+        border: 2px solid var(--border);
+        border-radius: 13px;
+        background: white;
+        text-align: center;
+        font-weight: 850;
+        transition: 180ms ease;
+      }
+
+      .array-item small {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 650;
+      }
+
+      .array-item.active {
+        border-color: var(--purple);
+        background: var(--purple-soft);
+        color: var(--purple);
+        transform: translateY(-4px);
+        box-shadow: 0 10px 22px rgba(124, 58, 237, 0.16);
+      }
+
+      .array-item.done {
+        border-color: #a8ddc8;
+        background: var(--green-soft);
+        color: var(--green);
+      }
+
+      .focus {
+        min-height: 230px;
+        display: grid;
+        place-items: center;
+        padding: 28px 20px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: #fbfcfe;
+        text-align: center;
+      }
+
+      .focus-inner {
+        width: min(100%, 820px);
+      }
+
+      .focus-kicker {
+        margin-bottom: 14px;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .equation {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        font-size: clamp(22px, 4vw, 36px);
+        font-weight: 850;
+        letter-spacing: -0.03em;
+      }
+
+      .chip {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-width: 130px;
+        padding: 12px 16px;
+        border-radius: 14px;
+        font-family: "SFMono-Regular", Consolas, monospace;
+        font-size: 0.72em;
+      }
+
+      .chip small {
+        margin-bottom: 4px;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        opacity: 0.8;
+      }
+
+      .accumulator-chip {
+        color: var(--blue);
+        background: var(--blue-soft);
+        border: 1px solid #c9d7ff;
+      }
+
+      .current-chip {
+        color: var(--purple);
+        background: var(--purple-soft);
+        border: 1px solid #d5c2ff;
+      }
+
+      .return-chip {
+        color: var(--green);
+        background: var(--green-soft);
+        border: 1px solid #bde7d5;
+      }
+
+      .operator {
+        color: var(--muted);
+      }
+
+      .focus-note {
+        margin: 20px auto 0;
+        max-width: 720px;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.6;
+      }
+
+      .focus-note strong {
+        color: var(--text);
+      }
+
+      .explanation {
+        min-height: 94px;
+        padding: 16px 18px;
+        border-radius: var(--radius);
+        border: 1px solid #c9d7ff;
+        background: var(--blue-soft);
+        line-height: 1.55;
+      }
+
+      .explanation strong {
+        color: var(--blue);
+      }
+
+      .controls {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .btn {
+        padding: 10px 16px;
+        border-radius: 11px;
+        border: 1px solid transparent;
+        cursor: pointer;
+        font-weight: 800;
+      }
+
+      .btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .btn-secondary {
+        background: white;
+        color: var(--text);
+        border-color: var(--border);
+      }
+
+      .btn-primary {
+        color: white;
+        background: var(--blue);
+        box-shadow: 0 8px 18px rgba(49, 94, 251, 0.2);
+      }
+
+      .footer {
+        padding: 14px 20px;
+        border-top: 1px solid var(--border);
+        background: #fbfcfe;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .footer strong {
+        color: var(--text);
+      }
+
+      @media (max-width: 680px) {
+        .page {
+          width: min(100% - 14px, 1000px);
+          margin: 10px auto;
+        }
+
+        .content {
+          padding: 12px;
+        }
+
+        .code-line {
+          font-size: 13px;
+        }
+
+        .focus {
+          padding: 20px 12px;
+        }
+
+        .equation {
+          gap: 7px;
+        }
+
+        .chip {
+          min-width: 105px;
+          padding: 10px 12px;
+        }
+
+        .array-item {
+          min-width: 62px;
+        }
+
+        .controls {
+          justify-content: stretch;
+        }
+
+        .btn {
+          flex: 1;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <main class="page">
+      <header class="intro">
+        <h1>How <code>reduce</code> Builds One Final Value</h1>
+        <p>
+          Follow the accumulator through the array. On every round, the callback
+          combines the running result with the current item and returns the
+          accumulator for the next round.
+        </p>
+      </header>
+
+      <section class="card">
+        <div class="header">
+          <strong>Example: add all numbers in the array</strong>
+          <span class="step-label" id="stepLabel">Step 0 of 6</span>
+        </div>
+
+        <div class="content">
+          <div class="code-panel" id="codePanel"></div>
+
+          <section class="array-panel">
+            <div class="section-label">Array being processed</div>
+            <div class="array-row" id="arrayRow"></div>
+          </section>
+
+          <section class="focus" aria-live="polite">
+            <div class="focus-inner">
+              <div class="focus-kicker" id="focusKicker"></div>
+              <div class="equation" id="equation"></div>
+              <div class="focus-note" id="focusNote"></div>
+            </div>
+          </section>
+
+          <div class="explanation" id="explanation"></div>
+
+          <div class="controls">
+            <button class="btn btn-secondary" id="previousButton">
+              Previous
+            </button>
+            <button class="btn btn-secondary" id="resetButton">Reset</button>
+            <button class="btn btn-primary" id="nextButton">Next step</button>
+          </div>
+        </div>
+
+        <div class="footer">
+          <strong>Most important rule:</strong>
+          whatever the callback returns becomes the accumulator for the next
+          iteration.
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const numbers = [100, 200, 300, 400, 500];
+
+      const steps = [
+        {
+          label: "Step 0 of 6",
+          processedCount: 0,
+          activeIndex: -1,
+          highlights: [{ id: "initialValue", className: "active-amber" }],
+          kicker: "Choose the starting accumulator",
+          accumulator: "0",
+          currentValue: null,
+          returnedValue: null,
+          note:
+            "The second argument to reduce is <code>0</code>. " +
+            "So the accumulator starts at <strong>0</strong> before any array item is processed.",
+          explanation:
+            "<strong>Initial value:</strong> " +
+            "<code>reduce(callback, 0)</code> tells JavaScript to begin the running result at 0.",
+        },
+        {
+          label: "Step 1 of 6",
+          processedCount: 0,
+          activeIndex: 0,
+          highlights: [
+            { id: "accumulatorParam", className: "active-blue" },
+            { id: "currentValueParam", className: "active-purple" },
+            { id: "returnExpression", className: "active-green" },
+            { id: "number0", className: "active-purple" },
+          ],
+          kicker: "Iteration 1",
+          accumulator: "0",
+          currentValue: "100",
+          returnedValue: "100",
+          note:
+            "The callback returns <code>0 + 100</code>. " +
+            "That returned value, <strong>100</strong>, becomes the next accumulator.",
+          explanation:
+            "<strong>Callback call:</strong> " +
+            "<code>(accumulator, currentValue) → (0, 100)</code>. " +
+            "Return value: <code>100</code>.",
+        },
+        {
+          label: "Step 2 of 6",
+          processedCount: 1,
+          activeIndex: 1,
+          highlights: [
+            { id: "accumulatorParam", className: "active-blue" },
+            { id: "currentValueParam", className: "active-purple" },
+            { id: "returnExpression", className: "active-green" },
+            { id: "number1", className: "active-purple" },
+          ],
+          kicker: "Iteration 2",
+          accumulator: "100",
+          currentValue: "200",
+          returnedValue: "300",
+          note:
+            "The previous return value is now the accumulator. " +
+            "<code>100 + 200</code> returns <strong>300</strong>.",
+          explanation:
+            "<strong>Accumulator carried forward:</strong> " +
+            "reduce does not start again from 0. It continues with the last returned value.",
+        },
+        {
+          label: "Step 3 of 6",
+          processedCount: 2,
+          activeIndex: 2,
+          highlights: [
+            { id: "accumulatorParam", className: "active-blue" },
+            { id: "currentValueParam", className: "active-purple" },
+            { id: "returnExpression", className: "active-green" },
+            { id: "number2", className: "active-purple" },
+          ],
+          kicker: "Iteration 3",
+          accumulator: "300",
+          currentValue: "300",
+          returnedValue: "600",
+          note:
+            "<code>300 + 300</code> returns <strong>600</strong>. " +
+            "That becomes the accumulator for the next iteration.",
+          explanation:
+            "<strong>Running result:</strong> " +
+            "the accumulator now represents the sum of all items processed so far.",
+        },
+        {
+          label: "Step 4 of 6",
+          processedCount: 3,
+          activeIndex: 3,
+          highlights: [
+            { id: "accumulatorParam", className: "active-blue" },
+            { id: "currentValueParam", className: "active-purple" },
+            { id: "returnExpression", className: "active-green" },
+            { id: "number3", className: "active-purple" },
+          ],
+          kicker: "Iteration 4",
+          accumulator: "600",
+          currentValue: "400",
+          returnedValue: "1000",
+          note: "<code>600 + 400</code> returns <strong>1000</strong>.",
+          explanation:
+            "<strong>Same callback, new values:</strong> " +
+            "reduce repeatedly invokes the callback with the updated accumulator and the next item.",
+        },
+        {
+          label: "Step 5 of 6",
+          processedCount: 4,
+          activeIndex: 4,
+          highlights: [
+            { id: "accumulatorParam", className: "active-blue" },
+            { id: "currentValueParam", className: "active-purple" },
+            { id: "returnExpression", className: "active-green" },
+            { id: "number4", className: "active-purple" },
+          ],
+          kicker: "Iteration 5",
+          accumulator: "1000",
+          currentValue: "500",
+          returnedValue: "1500",
+          note:
+            "<code>1000 + 500</code> returns <strong>1500</strong>. " +
+            "There are no more array items.",
+          explanation:
+            "<strong>Last callback call:</strong> " +
+            "the final returned accumulator is <code>1500</code>.",
+        },
+        {
+          label: "Step 6 of 6",
+          processedCount: 5,
+          activeIndex: -1,
+          highlights: [
+            { id: "totalResult", className: "active-green" },
+            { id: "consoleTotal", className: "active-green" },
+          ],
+          kicker: "reduce returns one final value",
+          accumulator: null,
+          currentValue: null,
+          returnedValue: "1500",
+          note:
+            "reduce finishes and assigns <strong>1500</strong> to <code>total</code>. " +
+            "Unlike <code>map</code> and <code>filter</code>, the result here is one number, not an array.",
+          explanation:
+            "<strong>Final result:</strong> " +
+            "<code>total === 1500</code>. The original array remains unchanged.",
+        },
+      ];
+
+      const codePanel = document.querySelector("#codePanel");
+      const arrayRow = document.querySelector("#arrayRow");
+      const stepLabel = document.querySelector("#stepLabel");
+      const focusKicker = document.querySelector("#focusKicker");
+      const equation = document.querySelector("#equation");
+      const focusNote = document.querySelector("#focusNote");
+      const explanation = document.querySelector("#explanation");
+      const previousButton = document.querySelector("#previousButton");
+      const resetButton = document.querySelector("#resetButton");
+      const nextButton = document.querySelector("#nextButton");
+
+      let currentStep = 0;
+
+      function buildCode() {
+        codePanel.innerHTML = `
+        <span class="code-line">const numbers = [<span class="token" id="number0">100</span>, <span class="token" id="number1">200</span>, <span class="token" id="number2">300</span>, <span class="token" id="number3">400</span>, <span class="token" id="number4">500</span>];</span>
+        <span class="code-line"> </span>
+        <span class="code-line">const <span class="token" id="totalResult">total</span> = numbers.reduce(function(</span>
+        <span class="code-line">  <span class="token" id="accumulatorParam">accumulator</span>, <span class="token" id="currentValueParam">currentValue</span></span>
+        <span class="code-line">) {</span>
+        <span class="code-line">  <span class="token" id="returnExpression">return accumulator + currentValue;</span></span>
+        <span class="code-line">}, <span class="token" id="initialValue">0</span>);</span>
+        <span class="code-line"> </span>
+        <span class="code-line">console.log(<span class="token" id="consoleTotal">total</span>);</span>
+      `;
+      }
+
+      function clearHighlights() {
+        document.querySelectorAll(".token").forEach((token) => {
+          token.classList.remove(
+            "active-blue",
+            "active-purple",
+            "active-green",
+            "active-amber",
+          );
+        });
+      }
+
+      function renderArray(step) {
+        arrayRow.innerHTML = numbers
+          .map((number, index) => {
+            let stateClass = "";
+
+            if (index < step.processedCount) {
+              stateClass = "done";
+            }
+
+            if (index === step.activeIndex) {
+              stateClass = "active";
+            }
+
+            return `
+          <div class="array-item ${stateClass}">
+            ${number}
+            <small>index ${index}</small>
+          </div>
+        `;
+          })
+          .join("");
+      }
+
+      function renderEquation(step) {
+        if (currentStep === 0) {
+          equation.innerHTML = `
+          <span class="chip accumulator-chip">
+            <small>initial accumulator</small>
+            0
+          </span>
+        `;
+          return;
+        }
+
+        if (currentStep === steps.length - 1) {
+          equation.innerHTML = `
+          <span class="chip return-chip">
+            <small>final result</small>
+            1500
+          </span>
+        `;
+          return;
+        }
+
+        equation.innerHTML = `
+        <span class="chip accumulator-chip">
+          <small>accumulator before</small>
+          ${step.accumulator}
+        </span>
+
+        <span class="operator">+</span>
+
+        <span class="chip current-chip">
+          <small>current value</small>
+          ${step.currentValue}
+        </span>
+
+        <span class="operator">=</span>
+
+        <span class="chip return-chip">
+          <small>callback returns</small>
+          ${step.returnedValue}
+        </span>
+      `;
+      }
+
+      function render() {
+        const step = steps[currentStep];
+
+        clearHighlights();
+
+        for (const highlight of step.highlights) {
+          const element = document.querySelector(`#${highlight.id}`);
+          if (element) {
+            element.classList.add(highlight.className);
+          }
+        }
+
+        stepLabel.textContent = step.label;
+        focusKicker.textContent = step.kicker;
+        focusNote.innerHTML = step.note;
+        explanation.innerHTML = step.explanation;
+
+        renderArray(step);
+        renderEquation(step);
+
+        previousButton.disabled = currentStep === 0;
+        nextButton.disabled = currentStep === steps.length - 1;
+      }
+
+      nextButton.addEventListener("click", () => {
+        if (currentStep < steps.length - 1) {
+          currentStep += 1;
+          render();
+        }
+      });
+
+      previousButton.addEventListener("click", () => {
+        if (currentStep > 0) {
+          currentStep -= 1;
+          render();
+        }
+      });
+
+      resetButton.addEventListener("click", () => {
+        currentStep = 0;
+        render();
+      });
+
+      buildCode();
+      render();
+    </script>
+  </body>
+</html>
