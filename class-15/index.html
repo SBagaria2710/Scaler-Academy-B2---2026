@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My first web page</title>
+</head>
+
+<body>
+  <button onclick="doFirst(); doSecond();">Click Me (Inline)</button>
+  <button id="btn">Click Me (External JS)</button>
+  <script src="./script.js"></script>
+  <script>
+    function doFirst() {
+      console.log('First thing!');
+    }
+
+    function doSecond() {
+      console.log('Second thing!');
+    }
+  </script>
+</body>
+
+</html>

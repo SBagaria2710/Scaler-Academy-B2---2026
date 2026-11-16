@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 40px;
+            transition: background-color 0.3s;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            border: 2px solid white;
+            border-radius: 4px;
+            color: white;
+        }
+
+        #red {
+            background-color: red;
+        }
+
+        #green {
+            background-color: green;
+        }
+
+        #blue {
+            background-color: blue;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Click a color button</h2>
+    <button class="color-btn" data-color="red" id="red">Red</button>
+    <button class="color-btn" data-color="green" id="green">Green</button>
+    <button class="color-btn" data-color="blue" id="blue">Blue</button>
+    <script>
+        const buttons = document.querySelectorAll('.color-btn');
+        buttons.forEach(function(btn) {
+            btn.addEventListener('click', function(event) {
+                const color = event.target.dataset.color;
+                document.body.style.backgroundColor = color;
+            })
+        })
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 40px;
+            transition: background-color 0.3s;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            border: 2px solid white;
+            border-radius: 4px;
+            color: white;
+        }
+
+        #red {
+            background-color: red;
+        }
+
+        #green {
+            background-color: green;
+        }
+
+        #blue {
+            background-color: blue;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Click a color button</h2>
+    <button id="red">Red</button>
+    <button id="green">Green</button>
+    <button id="blue">Blue</button>
+
+    <script>
+        document.querySelector("#red").addEventListener('click', function(event) {
+            document.body.style.backgroundColor = 'red';
+        });
+        document.querySelector("#green").addEventListener('click', function() {
+            document.body.style.backgroundColor = 'green';
+        });
+        document.querySelector("#blue").addEventListener('click', function() {
+            document.body.style.backgroundColor = 'blue';
+        });
+
+
+
+        document.querySelector("body").addEventListener('click', function(event) {
+            // console.log('Event Type: ', event.type);
+            // console.log('You clicked on: ', event.target);
+            // console.log('Tag name: ', event.target.tagName);
+            // console.log('Text: ', event.target.textContent);
+
+            console.log('Event.Target: ', event.target);
+            console.log('Event.CurrentTarget: ', event.currentTarget);
+
+            event.preventDefault();
+        });
+    </script>
+</body>
+
+</html>
