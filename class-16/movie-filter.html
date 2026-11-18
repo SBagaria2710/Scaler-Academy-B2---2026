@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Movie Filter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: sans-serif;
+            background-color: #f5f5f5;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        #searchInput {
+            padding: 10px 15px;
+            width: 300px;
+            font-size: 16px;
+            border: 2px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            margin-top: 24px;
+        }
+
+        #movieList {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .movie-card.visible {
+            opacity: 1;
+        }
+
+        .movie-card {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 6px;
+            font-size: 18px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
+        #navbar {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            padding: 15px 30px;
+            background-color: transparent;
+            font-size: 20px;
+            font-weight: bold;
+            z-index: 100;
+            transition: background-color 0.3s, box-shadow 0.3s;
+        }
+
+        #navbar.scrolled {
+            background-color: #1a1a2e;
+            color: white;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .container {
+            padding: 40px;
+        }
+
+        .delete-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .delete-btn:hover {
+            background: #c0392b;
+        }
+    </style>
+</head>
+
+<body>
+    <nav id="navbar">Movie Browser</nav>
+    <div class="container">
+        <input type="text" id="searchInput" placeholder="Search movies..." />
+        <div id="movieList">
+            <div class="movie-card">
+                <span class="movie-title">The Dark Knight</span>
+                <button class="delete-btn">X</button>
+            </div>
+            <div class="movie-card">
+                <span class="movie-title">Inception</span>
+                <button class="delete-btn">X</button>
+            </div>
+            <div class="movie-card">
+                <span class="movie-title">Interstellar</span>
+                <button class="delete-btn">X</button>
+            </div>
+            <div class="movie-card">
+                <span class="movie-title">The Matrix</span>
+                <button class="delete-btn">X</button>
+            </div>
+            <div class="movie-card">
+                <span class="movie-title">Pulp Fiction</span>
+                <button class="delete-btn">X</button>
+            </div>
+            <div class="movie-card">
+                <span class="movie-title">The Godfather</span>
+                <button class="delete-btn">X</button>
+            </div>
+
+        </div>
+    </div>
+    <script>
+        const input = document.querySelector("#searchInput");
+        const movieCards = document.querySelectorAll(".movie-card");
+        input.addEventListener('keyup', function () {
+            const searchTerm = input.value.toLowerCase();
+
+            movieCards.forEach(function (card) {
+                const title = card.textContent.toLowerCase();
+                if (title.includes(searchTerm)) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = "none";
+                }
+            });
+        });
+
+        const navbar = document.querySelector('#navbar');
+        window.addEventListener('scroll', function () {
+            if (window.scrollY > 50) {
+                navbar.classList.add('scrolled');
+            } else {
+                navbar.classList.remove('scrolled');
+            }
+        });
+
+        const cards = document.querySelectorAll('.movie-card');
+        function revealOnScroll() {
+            cards.forEach(function (card) {
+                const rect = card.getBoundingClientRect();
+                if (rect.top < window.innerHeight) {
+                    card.classList.add('visible');
+                }
+            });
+        }
+
+        revealOnScroll();
+        window.addEventListener('scroll', revealOnScroll);
+
+        // const deleteButtons = document.querySelectorAll('.delete-btn');
+        // deleteButtons.forEach(function(btn) {
+        //     btn.addEventListener('click', function(event) {
+        //         const card = event.target.parentElement;
+        //         card.remove();
+        //     });
+        // });
+
+        // const newCard = document.createElement('div');
+        // newCard.classList.add('.movie-card', 'visible');
+        // newCard.innerHTML = '<span class="movie-title">new movie</span><button class="delete-btn">X</button>';
+        // document.querySelector('#movie-list').appendChild(newCard);
+
+        // // Manually attach listener to the new button
+        // newCard.querySelector('.delete-btn').addEventListener('click', function(event) {
+        //     event.target.parentElement.remove();
+        // });
+
+        // const movieList = document.querySelector("#movieList");
+        // movieList.addEventListener('click', function(event) {
+        //     console.log('Click detected on movieList');
+        //     console.log('Actual element clicked: ', event.target);
+        //     console.log('Listener attached to: ', event.currentTarget);
+        // })
+
+        const movieList = document.querySelector("#movieList");
+        movieList.addEventListener('click', function(event) {
+            if (event.target.classList.contains('delete-btn')) {
+                const card = event.target.parentElement;
+                card.remove();
+            }
+        })
+
+    </script>
+</body>
+
+</html>
