@@ -82,6 +82,59 @@ body {
     flex-wrap: wrap;
     margin-top: 5rem;
     padding: 1rem;
+    gap: 12px;
+}
+
+.ticket {
+    position: relative;
+    width: 250px;
+    min-height: 100px;
+    background: #3d3d3d;
+    border-radius: 5px;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+}
+
+.ticket-color-band {
+    width: 8px;
+    align-self: stretch;
+    flex-shrink: 0;
+}
+
+.ticket-text {
+    flex-grow: 1;
+    min-width: 0;
+    padding: 10px;
+    color: #ffffff;
+    word-wrap: break-word;
+    font-size: 0.875rem;
+}
+
+.ticket-lock {
+    width: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    font-size: 0.875rem;
+}
+
+.ticket-remove {
+    width: 25px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #888;
+    font-size: 12px;
+    position: absolute;
+    right: 4px;
+    top: 10px;
+}
+.ticket-remove:hover {
+    color: white;
 }
 
 .modal {
